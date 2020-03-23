@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    "module": "commonjs",
+    "target": "esnext",
+
+    "declaration": true,
+    "declarationDir": "declarations",
+    "declarationMap": true,
+
+    "outDir": "build",
+    "sourceMap": true,
+
+    "strict": true,
+
+    "experimentalDecorators": true,
+    "preserveConstEnums": true,
+    "removeComments": true
+  },
+  "include": [
+    "src/**/*",
+    "types/**/*"
+  ],
+  "baseUrl": ".",
+  "paths": {
+    "*": [
+      "node_modules/*"
+    ]
+  }
+}
