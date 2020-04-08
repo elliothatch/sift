@@ -5,11 +5,16 @@
   "scripts": {
     "build": "node node_modules/.bin/tsc",
     "start": "node build/index.js",
-    "debug": "node --inspect-brk build/index.js"
+    "debug": "node --inspect-brk build/index.js",
+    "test": "node_modules/jest/bin/jest.js"
   },
   "license": "MIT",
   "devDependencies": {
+    "@types/jest": "^25.2.1",
     "@types/node": "^13.9.2",
+    "freshlog": "^0.2.4",
+    "jest": "^25.2.4",
+    "ts-jest": "^25.3.1",
     "typescript": "^3.8.3"
   },
   "dependencies": {

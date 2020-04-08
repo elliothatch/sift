@@ -1,39 +1,18 @@
-import {terminal, Terminal, ScreenBuffer, TextBuffer} from 'terminal-kit';
+import {terminal, Terminal, Buffer, ScreenBuffer, TextBuffer} from 'terminal-kit';
 
 export namespace Panel {
-    export interface Options {
-        width: number;
-        height: number;
-    }
-
-    export class Screen {
-        options: Options;
-        buffer: ScreenBuffer;
-        constructor(options: Options) {
-            this.options = options;
-            this.buffer = new ScreenBuffer(options);
-        }
-    }
-
-    export class Text {
-        buffer: TextBuffer;
-        constructor(options: Options) {
-            this.buffer = new TextBuffer(options);
-        }
-    }
-
-    export function addChild(parent: Panel, child: Panel) {
+    export function addChild(parent: Panel<Buffer>, child: Panel<Buffer>) {
         if(!parent.children) {
             parent.children = [];
         }
         parent.children.push(child);
-        child.buffer.dst = parent.buffer;
+        getScreenBuffer(child.buffer).dst = getScreenBuffer(parent.buffer);
     };
 
     /** draw the buffer and all its parents */
-    export function draw(panel: Panel) {
+    export function draw(panel: Panel<Buffer>) {
         let currentBuffer = panel.buffer;
-        while(currentBuffer && currentBuffer instanceof ScreenBuffer) {
+        while(currentBuffer && currentBuffer instanceof ScreenBuffer || currentBuffer instanceof TextBuffer) {
             currentBuffer.draw();
             currentBuffer.drawCursor();
             currentBuffer = currentBuffer.dst as ScreenBuffer;
@@ -41,7 +20,7 @@ export namespace Panel {
     }
 
     /** draw all children in a post-DFS order */
-    export function redrawChildren(panel: Panel) {
+    export function redrawChildren(panel: Panel<Buffer>) {
         if(panel.children) {
             panel.children.forEach(redrawChildren);
         }
@@ -49,8 +28,13 @@ export namespace Panel {
         panel.buffer.drawCursor();
     }
 
+    /** returns the screen buffer if it is one, or the dst buffer of a TextBuffer */
+    export function getScreenBuffer(buffer: Buffer): ScreenBuffer {
+        return buffer instanceof ScreenBuffer? buffer: buffer.dst;
+    }
+
     /** recalculate the size of a panel and its children */
-    export function resize(panel: Panel) {
+    export function resize(panel: Panel<Buffer>) {
         if(!panel.flex || !panel.flex.width) {
             panel.calculatedWidth = panel.width;
         }
@@ -63,7 +47,7 @@ export namespace Panel {
             throw new Error(`Panel.resize: panel '${panel.name}' has flex '${panel.flex}', but does not have its own width/height calculated. Ensure Panel.resize() has been drawn on the parent of '${panel.name}', or disable flex on this panel`);
         }
 
-        panel.buffer.resize({
+        getScreenBuffer(panel.buffer).resize({
             x: 0,
             y: 0,
             width: panel.calculatedWidth!,
@@ -71,8 +55,8 @@ export namespace Panel {
         });
 
         if(panel.children) {
-            const flexChildren: Panel[] = [];
-            const fixedChildren: Panel[] = [];
+            const flexChildren: Panel<Buffer>[] = [];
+            const fixedChildren: Panel<Buffer>[] = [];
             panel.children.forEach((child) => {
                 if((panel.flexCol && child.flex && child.flex.width)
                     || !panel.flexCol && child.flex && child.flex.height) {
@@ -100,29 +84,30 @@ export namespace Panel {
             let position = 0;
 
             panel.children.forEach((child) => {
+                const screenBuffer = getScreenBuffer(child.buffer);
                 if(panel.flexCol) {
                     child.calculatedWidth = child.flex && child.flex.width?
-                        Math.floor(flexSize * (child.width / flexGrowSum)):
+                        Math.round(flexSize * (child.width / flexGrowSum)):
                         child.width;
 
                     child.calculatedHeight = child.flex && child.flex.height?
                         panel.calculatedHeight:
                         child.height;
 
-                    child.buffer.x = position;
-                    child.buffer.y = 0;
+                    screenBuffer.x = position;
+                    screenBuffer.y = 0;
                     position += child.calculatedWidth;
                 }
                 else {
                     child.calculatedHeight = child.flex && child.flex.height?
-                        Math.floor(flexSize * (child.height / flexGrowSum)):
+                        Math.round(flexSize * (child.height / flexGrowSum)):
                         child.height;
                     child.calculatedWidth = child.flex && child.flex.width?
                         panel.calculatedWidth:
                         child.width;
 
-                    child.buffer.x = 0;
-                    child.buffer.y = position;
+                    screenBuffer.x = 0;
+                    screenBuffer.y = position;
                     position += child.calculatedHeight;
                 }
 
@@ -132,10 +117,10 @@ export namespace Panel {
     }
 }
 
-export interface Panel {
+export interface Panel<T extends Buffer> {
     /** name used for identification in error messages */
     name?: string;
-    buffer: ScreenBuffer | TextBuffer;
+    buffer: T;
     width: number;
     height: number;
     /** if true, width/height is used as a grow factor to fill remaining space */
@@ -149,7 +134,7 @@ export interface Panel {
     calculatedHeight?: number;
     calculatedWidth?: number;
 
-    children?: Panel[];
+    children?: Panel<Buffer>[];
 }
 
 
@@ -157,16 +142,16 @@ export class Display {
 
     public terminal: Terminal
 
-    public rootPanel: Panel;
-    public logPanel: Panel;
-    public statusBar: Panel;
-    public queryResults: Panel;
-    public processPanel: Panel;
+    public rootPanel: Panel<ScreenBuffer>;
+    public logPanel: Panel<ScreenBuffer>;
+    public statusBar: Panel<ScreenBuffer>;
+    public queryResults: Panel<ScreenBuffer>;
+    public processPanel: Panel<ScreenBuffer>;
 
-    public queryPanel: Panel;
+    public queryPanel: Panel<TextBuffer>;
 
-    constructor() {
-        this.terminal = terminal;
+    constructor(term?: Terminal) {
+        this.terminal = term || terminal;
 
         this.rootPanel = {
             name: 'root',
@@ -177,7 +162,7 @@ export class Display {
 
         this.logPanel = {
             name: 'log',
-            buffer: new ScreenBuffer({dst: this.terminal}),
+            buffer: new ScreenBuffer({dst: this.rootPanel}),
             width: 1,
             height: 1,
             flex: { width: true, height: true },
@@ -229,7 +214,7 @@ export class Display {
 
         this.queryPanel = {
             name: 'query',
-            buffer: new ScreenBuffer({dst: this.terminal}),
+            buffer: new TextBuffer({dst: new ScreenBuffer({dst: this.terminal})}),
             width: 1,
             height: 1,
             flex: { width: true }
@@ -252,14 +237,14 @@ export class Display {
     }
 
     public draw() {
-        this.rootPanel.buffer.fill({char: '1', attr: {color: 'black', bgColor: 'red'}});
-        this.logPanel.buffer.fill({char: '2', attr: {color: 'black', bgColor: 'green'}});
-        this.logPanel.children![0].buffer.fill({char: '3', attr: {color: 'black', bgColor: 'blue'}});
-        this.logPanel.children![1].buffer.fill({char: '4', attr: {color: 'black', bgColor: 'yellow'}});
-        this.statusBar.buffer.fill({char: '5', attr: {color: 'black', bgColor: 'green'}});
-        this.queryResults.buffer.fill({char: '6', attr: {color: 'black', bgColor: 'brightred'}});
-        this.processPanel.buffer.fill({char: '7', attr: {color: 'black', bgColor: 'yellow'}});
-        this.queryPanel.buffer.fill({char: '8', attr: {color: 'black', bgColor: 'white'}});
+        // this.rootPanel.buffer.fill({char: '1', attr: {color: 'black', bgColor: 'red'}});
+        // this.logPanel.buffer.fill({char: '2', attr: {color: 'black', bgColor: 'green'}});
+        // (this.logPanel.children![0].buffer as ScreenBuffer).fill({char: '3', attr: {color: 'black', bgColor: 'blue'}});
+        // (this.logPanel.children![1].buffer as ScreenBuffer).fill({char: '4', attr: {color: 'black', bgColor: 'yellow'}});
+        // this.statusBar.buffer.fill({char: '5', attr: {color: 'black', bgColor: 'green'}});
+        // this.queryResults.buffer.fill({char: '6', attr: {color: 'black', bgColor: 'brightred'}});
+        // this.processPanel.buffer.fill({char: '7', attr: {color: 'black', bgColor: 'yellow'}});
+        // this.queryPanel.buffer.fill({char: '8', attr: {color: 'black', bgColor: 'white'}});
 
         Panel.redrawChildren(this.rootPanel);
     }

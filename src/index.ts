@@ -3,7 +3,7 @@ import { createInterface, Interface } from 'readline';
 
 import { spawn, ChildProcessWithoutNullStreams } from 'child_process';
 
-import { Display } from './display';
+import { Display, Panel } from './display';
 /*
 const AlertColors: {[level: string]: AlertColor } = {};
 
@@ -49,8 +49,6 @@ const errorStream = readline.createInterface({
 });
 */
 
-// const targetProcess = createProcess(process.argv[1], process.argv.slice(2));
-
 const display = new Display();
 display.init();
 
@@ -65,6 +63,20 @@ display.terminal.on('key', (name: any, matches: any, data: any) => {
 				process.exit();
 			// }
         }
+		else if(name === 'BACKSPACE') {
+			display.queryPanel.buffer.backDelete(1);
+			// filterLogs(queryTextBuffer.getText());
+			Panel.draw(display.queryPanel);
+		}
+		else if(name === 'DELETE') {
+			display.queryPanel.buffer.delete(1);
+			// filterLogs(queryTextBuffer.getText());
+			Panel.draw(display.queryPanel);
+		}
+        else if(data.isCharacter) {
+            display.queryPanel.buffer.insert(name);
+            Panel.draw(display.queryPanel);
+        }
     }
 	catch(err) {
 		display.terminal.fullscreen(false);
@@ -74,3 +86,8 @@ display.terminal.on('key', (name: any, matches: any, data: any) => {
 });
 
 display.draw();
+
+const targetProcess = createProcess(process.argv[1], process.argv.slice(2));
+targetProcess.stdoutInterface.on('line', (line) => {
+});
+

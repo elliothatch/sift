@@ -43,8 +43,10 @@ declare module 'terminal-kit' {
         y: number;
     }
 
+    type Buffer = ScreenBuffer | TextBuffer;
+
     class ScreenBuffer {
-        public dst: Terminal | ScreenBuffer;
+        public dst: Buffer | Terminal;
         public x: number;
         public y: number;
 
@@ -54,6 +56,7 @@ declare module 'terminal-kit' {
         public draw(): void;
         public drawCursor(): void;
         public fill(options?: Partial<{attr: Attributes, char: string, region: RectObject}>): void;
+        public moveTo(x: number, y: number): void;
         public resize(fromRect: RectObject | {
             xmin: number;
             xmax: number;
@@ -62,7 +65,33 @@ declare module 'terminal-kit' {
         }): void;
     }
 
-    class TextBuffer extends ScreenBuffer {
+    class TextBuffer {
+        public dst: ScreenBuffer;
+        public x: number;
+        public y: number;
+
         constructor(options: any);
+
+        public draw(): void;
+        public drawCursor(): void;
+
+        public getText(): string;
+        public getHidden(): boolean;
+        public setHidden(state: any): void;
+        public getContentSize(): {width: number; height: number};
+        public moveUp(): void;
+        public moveDown(): void;
+        public moveLeft(): void;
+        public moveRight(): void;
+        public moveForward(justSkipNullCells: boolean): void;
+        public moveBackward(justSkipNullCells: boolean): void;
+        public moveToStartOfWord(): void;
+        public moveToEndOfWord(): void;
+        public moveToEndOfLine(): void;
+        public moveInBound(ignoreCx: boolean): void;
+        public insert(text: string, attr?: Attributes): void;
+        public delete(n?: number): void;
+        public backDelete(n?: number): void;
+        public newLine(): void;
     }
 }
