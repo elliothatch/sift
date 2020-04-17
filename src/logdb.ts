@@ -1,6 +1,11 @@
 import {Readable} from 'stream';
 import * as fuzzysort from 'fuzzysort';
 
+import { EMPTY, from, merge, Observable, of } from 'rxjs';
+import { map, mergeMap } from 'rxjs/operators';
+
+import { Parse } from './query';
+
 /** an index into the `logs` array */
 export type LogIdx = number;
 /** fully qualified propery name (period-seperated) */
@@ -11,19 +16,51 @@ export interface LogRecord {
     idx: LogIdx;
 }
 
+export interface LogValueMap {
+    value: any;
+    // preparedValue: fuzzysort.Prepared;
+    property: PropertyId;
+    idx: LogIdx;
+}
+
+export interface Filter {
+    match: Parse.Expression.MATCH[];
+    exclude: Parse.Expression.MATCH[];
+}
+
+export interface ResultSet {
+    /** dictionary that stores fuzzysort match information about each log. used for text highlighting */
+    matches: Map<LogIdx, {
+        property: fuzzysort.Result[];
+        value: fuzzysort.Result[];
+    }>;
+
+    /** the following properties are indexes for logs found in the matches dictionary */
+    propertyIndex:  Map<PropertyId, LogIdx[]>;
+    properties: PropertyId[];
+
+    // TODO: fuzzysort match.target might always be a string, breaking this association
+    valueIndex: Map<any, LogIdx[]>;
+    values: any[];
+}
+
 export class LogDb {
     /** this array contains all the logs, */
     public logs: LogRecord[];
     public propertyIndex:  {[flatPropertyName: string]: LogIdx[]};
 
     public allProperties: PropertyId[];
-    public allValues: any[];
+    public allValues: LogValueMap[]; // TODO: we should probably combine identical values into a single entry in the array, which lists all logs that contain this exact value
+    public fuzzysortThreshold: number;
+
+    public resultSet: ResultSet;
 
     constructor() {
         this.logs = [];
         this.propertyIndex = {};
         this.allProperties = [];
         this.allValues = [];
+        this.fuzzysortThreshold = -100;
     }
 
     /** parses a raw string, then records it in the database and indexes it */
@@ -91,6 +128,300 @@ export class LogDb {
 
         this.allValues.push(...values);
     }
+
+    public filter(query: Parse.Expression, searchSet?: ResultSet): ResultSet {
+        if(!searchSet) {
+            searchSet = this.searchSet;
+        }
+
+        switch(query.eType) {
+            case 'VALUE':
+                return this.filter({
+                        eType: 'OR',
+                    lhs: {
+                        eType: 'MATCH',
+                        mType: 'PROPERTY',
+                        property: query,
+                    },
+                    rhs: {
+                        eType: 'MATCH',
+                        mType: 'VALUE',
+                        value: query,
+                    }
+                }, searchSet);
+            case 'EXCLUDE':
+                return this.fitler({
+                    eType: 'AND',
+                    lhs: {
+                        eType: 'MATCH',
+                        mType: 'PROPERTY',
+                        property: query,
+                    },
+                    rhs: {
+                        eType: 'MATCH',
+                        mType: 'VALUE',
+                        property: query
+                    }
+                }, searchSet);
+            case 'MATCH':
+                return this.filterMatch(query, searchSet);
+            case 'AND':
+                // return the intersection of results
+                return this.filterMatch(query.rhs, this.filterMatch(query.lhs, searchSet);
+            case 'OR': {
+                const lhsResultSet = this.filterMatch(query.lhs, searchSet);
+                const rhsResultSet = this.filterMatch(query.rhs, searchSet);
+                // TODO: return the union of results
+                return searchSet;
+            }
+            default:
+                throw new Error(`Unrecognized expression: ${query}`);
+        }
+    }
+
+    // filter MATCH steps
+    // for each MATCH in the filter, in the remaining result set:
+    // 1. evaluate FULL MATCHES that may include exclude clauses, and PROPERTY and VALUE matches that do not contain an exclude
+    // 2. evaluate PROPERTY and VALUE matches that contain an EXCLUDE.
+    public filterMatch(match: Parse.Expression.MATCH, searchSet: ResultSet): Observable<ResultSet> {
+        if((match.mType === 'FULL' || match.mType === 'PROPERTY')
+            && match.property.eType !== 'EXCLUDE') {
+            // search by property index
+            return from(fuzzysort.goAsync(match.property, searchSet.propertyNames, {
+                // limit: 100,
+                threshold: this.fuzzysortThreshold,
+            })).pipe(
+                map((propertyMatches) => {
+                    return propertyMatches.reduce((resultSet, propertyMatch) => {
+                        searchSet.propertyIndex[propertyMatch.target].forEach((logIdx) => {
+                            if(match.mType === 'FULL') {
+                                const log = this.logs[logIdx];
+                                const value = getProperty(log, propertyMatch.target);
+                                const valueMatch = fuzzysort.go(match.value, [value], {threshold: this.fuzzysortThreshold});
+                                if((match.value.eType === 'EXCLUDE' && valueMatch.length > 0)
+                                    || (match.value.eType !== 'EXCLUDE' && valueMatch.length === 0)) {
+                                    // no match
+                                    return;
+                                }
+                                else {
+                                    // matched property and value
+                                    // add value to the index and matches
+                                    // TODO: there's a lot of repetition here
+                                    // I think we should be able to reorder these things so we only have to set "matches" once
+                                    let resultMatch = resultSet.matches.get(logIdx);
+                                    if(!resultMatch) {
+                                        resultMatch = {
+                                            property: [],
+                                            value: [],
+                                        };
+                                    }
+                                    resultMatch.value.push(propertyMatch);
+                                    resultSet.matches.set(logIdx, resultMatch);
+
+                                    let resultValueIndex = resultSet.valueIndex.get(value);
+                                    if(!resultValueIndex) {
+                                        resultValueIndex = [];
+                                        values.push(value);
+                                    }
+
+                                    resultValueIndex.push(logIdx);
+                                    resultSet.valueIndex.set(value, resultValueIndex);
+                                }
+                            }
+
+                            let resultMatch = resultSet.matches.get(logIdx);
+                            if(!resultMatch) {
+                                resultMatch = {
+                                    property: [],
+                                    value: [],
+                                };
+                            }
+
+                            // property match! add proeprty to index and matches
+                            resultMatch.property.push(propertyMatch);
+                            resultSet.matches.set(logIdx, resultMatch);
+
+                            let resultPropertyIndex = resultSet.propertyIndex.get(propertyMatch.target);
+                            if(!resultPropertyIndex) {
+                                resultPropertyIndex = [];
+                                properties.push(propertyMatch.target);
+                            }
+
+                            resultPropertyIndex.push(logIdx);
+                            resultSet.propertyIndex.set(propertyMatch.target, resultPropertyIndex);
+                        });
+
+                    }, {
+                        matches: new Map(),
+                        propertyIndex: new Map(),
+                        properties: [],
+                        valueIndex: new Map(),
+                        values: []
+                    } as ResultSet);
+                })
+            );
+        }
+        else if((match.mType === 'FULL' || match.mType === 'VALUE')
+            && match.value.eType !== 'EXCLUDE') {
+            // search by value index
+        }
+        else if(match.mType === 'FULL') {
+            // both fields are excluded
+            // this query doesn't make any sense, don't do anything
+            return of(searchSet);
+        }
+        else if(match.mType === 'PROPERTY') {
+            // must be an exclude property
+        }
+        else if(match.mType === 'VALUE') {
+            // must be an exclude value
+        }
+    }
+
+
+            return from(fuzzysort.goAsync(match.property, resultSet.propertyNames, {
+                // limit: 100,
+                threshold: this.fuzzysortThreshold,
+            })).pipe(
+                mergeMap((propertyMatches) => {
+                    return merge(propertyMatches.map((propertyMatch) => {
+                        const log = this.logs[this.propertyIndex[propertyMatch.target]];
+                        const value = getProperty(log, propertyMatch.target);
+                        if(match.mType === 'FULL') {
+                            if(match.value.eType === 'VALUE') {
+                            const valueMatch = fuzzysort.go(match.value, [value], {threshold: this.fuzzysortThreshold});
+                            if(valueMatch.length === 0) {
+                                // the value did not match the queried value
+                                return EMPTY;
+                            }
+                        }
+
+                            return {
+                                expr: match,
+                                matchResult: propertyMatch,
+                                property: propertyMatch.target,
+                                value,
+                                log,
+                            };
+                        }));
+                    })
+                );
+
+            switch(match.mType) {
+                case 'FULL':
+                case 'PROPERTY':
+                case 'VALUE':
+                    return from(fuzzysort.goAsync(match.value, this.allValues, {
+                        key: 'value',
+                        limit: 100,
+                        threshold: this.fuzzysortThreshold,
+                    })).pipe(
+                        mergeMap((valueMatches) => {
+                            return merge(valueMatches.map((valueMatch) => {
+                                const target: LogValueMap = valueMatch.target;
+                                const log = this.logs[valueMatch.target.idx];
+
+                                return {
+                                    expr: match,
+                                    matchResult: valueMatch,
+                                    property: target.property,
+                                    value: target.value,
+                                    log,
+                                };
+                            }));
+                        })
+                    );
+                case 'ALL':
+                    return EMPTY; // TODO: should just return all the results i guess
+            }
+        }));
+
+        // cull matches that are excluded
+        
+        return matchedLogs;
+    }
+
+    // meta-filter steps:
+    // 1. create a result set that contains all logs
+    // 2. 
+    // 1. create a FILTER object for each OR statement. each FILTER includes all the MATCHES AND statements
+    // 2. perform filter MATCH action on all FILTERS
+    // 3. return the union of all FILTERS
+    //
+    // filter MATCH steps
+    // for each MATCH in the filter, in the remaining result set:
+    // 1. evaluate FULL MATCHES that may include exclude clauses, and PROPERTY and VALUE matches that do not contain an exclude
+    // 2. evaluate PROPERTY and VALUE matches that contain an EXCLUDE.
+
+    public filter(f: Filter): Observable<{match: fuzzysort.Result, log: LogRecord}> {
+        // TODO: add ability to cancel searches
+        // TODO: there are problems with this currently:
+        // right now we're trying to match liberally, then prune matches with an EXCLUDE pass.
+        // but does it make more sense to e.g. EXCLUDE a match from the first pass if it is of the form !property:value -- rather than finding all matches for VALUE, then 
+        //  yeah that doesn't work, because the expression will be MATCH (EXLUDE PROP, VALUE)--thus giving us a "FULL"  match  which doesn't work with the current expression format
+        //  still--it would be simplest if we still did it in two passes I think, just need to carry enough information through the first pass. making sense of a query to convert it to another kind will take a bit of work
+        
+        // find all matches
+        let matchedLogs: Observable<{match: fuzzysort.Result, log: LogRecord}> = merge(f.match.map((match) => {
+            switch(match.mType) {
+                case 'FULL':
+                case 'PROPERTY':
+                    return from(fuzzysort.goAsync(match.property, this.allProperties, {
+                        limit: 100,
+                        threshold: this.fuzzysortThreshold,
+                    })).pipe(
+                        mergeMap((propertyMatches) => {
+                            return merge(propertyMatches.map((propertyMatch) => {
+                                const log = this.logs[this.propertyIndex[propertyMatch.target]];
+                                const value = getProperty(log, propertyMatch.target);
+                                if(match.mType === 'FULL') {
+                                    const valueMatch = fuzzysort.go(match.value, [value], {threshold: this.fuzzysortThreshold});
+                                    if(valueMatch.length === 0) {
+                                        // the value did not match the queried value
+                                        return EMPTY;
+                                    }
+                                }
+
+                                return {
+                                    expr: match,
+                                    matchResult: propertyMatch,
+                                    property: propertyMatch.target,
+                                    value,
+                                    log,
+                                };
+                            }));
+                        })
+                    );
+                case 'VALUE':
+                    return from(fuzzysort.goAsync(match.value, this.allValues, {
+                        key: 'value',
+                        limit: 100,
+                        threshold: this.fuzzysortThreshold,
+                    })).pipe(
+                        mergeMap((valueMatches) => {
+                            return merge(valueMatches.map((valueMatch) => {
+                                const target: LogValueMap = valueMatch.target;
+                                const log = this.logs[valueMatch.target.idx];
+
+                                return {
+                                    expr: match,
+                                    matchResult: valueMatch,
+                                    property: target.property,
+                                    value: target.value,
+                                    log,
+                                };
+                            }));
+                        })
+                    );
+                case 'ALL':
+                    return EMPTY; // TODO: should just return all the results i guess
+            }
+        }));
+
+        // cull matches that are excluded
+        
+        return matchedLogs;
+    }
 }
 
 /** turn a raw string into a json object
@@ -117,6 +448,24 @@ function parseErrorLog(line: string) {
         message: line,
     };
     return log;
+}
+
+/** Gets a property from an object if it exists. Supports nested properties
+ * @argument obj - root object
+ * @argument propertyName - name of the property to retrieved. Nested properties are specified with dot notation ('a.b.c')
+ */
+function getProperty(obj: object, propertyId: PropertyId) {
+    if(!obj) {
+        return undefined;
+    }
+
+    const properties = propertyName.split('.');
+    const value = obj[properties[0]];
+    if(properties.length === 1) {
+        return value;
+    }
+
+    return getProperty(value, properties.slice(1).join('.'));
 }
 
 /*

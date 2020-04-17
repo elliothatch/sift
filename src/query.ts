@@ -26,9 +26,10 @@ const tokenDefinitions: TokenDefinition[] = [{
 }, {
     tType: 'QUOTED_STR',
     pattern: /".*"/y,
-}, {
-    tType: 'NUMBER',
-    pattern: /[+-]?\d+(\.\d+)?/y,
+// }, {
+    // tType: 'NUMBER',
+    // pattern: /[+-]?\d+(\.\d+)?/y,
+    /*
 }, {
     tType: 'OBJECT_BEGIN',
     pattern: /{/y,
@@ -38,6 +39,7 @@ const tokenDefinitions: TokenDefinition[] = [{
 }, {
     tType: 'OBJECT_END',
     pattern: /}/y,
+    */
 }, {
     tType: 'LESS_THAN_EQ',
     pattern: /<=/y,
@@ -55,7 +57,7 @@ const tokenDefinitions: TokenDefinition[] = [{
     pattern: / /y,
 }, {
     tType: 'OR',
-    pattern: /\|/y,
+    pattern: /,/y,
 }, {
     tType: 'EXCLUDE',
     pattern: /\!/y,
@@ -141,9 +143,6 @@ export namespace Parse {
     export type Expression =
           Expression.VALUE
         | Expression.MATCH
-        | Expression.MATCH_PROPERTY
-        | Expression.MATCH_VALUE
-        | Expression.MATCH_ALL
         | Expression.AND
         | Expression.OR
         | Expression.EXCLUDE;
@@ -154,34 +153,48 @@ export namespace Parse {
             eType: 'VALUE';
             value: any;
         }
-        export interface MATCH {
-            eType: 'MATCH';
-            property: VALUE | EXCLUDE;
-            value: VALUE | EXCLUDE;
-        }
-        /** e.g. 'prop:', filters to objects with matching property */
-        export interface MATCH_PROPERTY {
-            eType: 'MATCH_PROPERTY';
-            property: VALUE | EXCLUDE;
-        }
-        /** e.g. ':value', filters to matching value for any property */
-        export interface MATCH_VALUE {
-            eType: 'MATCH_VALUE';
-            value: VALUE | EXCLUDE;
-        }
-        /* a lone semicolon is valid, it just doesn't do anything */
-        export interface MATCH_ALL {
-            eType: 'MATCH_ALL';
+
+        export type MATCH =
+              MATCH.FULL_MATCH
+            | MATCH.PROPERTY_MATCH
+            | MATCH.VALUE_MATCH
+            | MATCH.ALL_MATCH;
+
+        export namespace MATCH {
+            export interface BASE_MATCH {
+                eType: 'MATCH';
+            }
+
+            export interface FULL_MATCH extends BASE_MATCH {
+                mType: 'FULL';
+                property: VALUE | EXCLUDE;
+                value: VALUE | EXCLUDE;
+            }
+            /** e.g. 'prop:', filters to objects with matching property */
+            export interface PROPERTY_MATCH extends BASE_MATCH {
+                mType: 'PROPERTY';
+                property: VALUE | EXCLUDE;
+            }
+
+            /** e.g. ':value', filters to matching value for any property */
+            export interface VALUE_MATCH extends BASE_MATCH {
+                mType: 'VALUE';
+                value: VALUE | EXCLUDE;
+            }
+            /* a lone semicolon is valid, it just doesn't do anything */
+            export interface ALL_MATCH extends BASE_MATCH {
+                mType: 'ALL';
+            }
         }
         export interface AND {
             eType: 'AND';
-            lhs: MATCH | VALUE;
-            rhs: MATCH | VALUE;
+            lhs?: MATCH | VALUE;
+            rhs?: MATCH | VALUE;
         }
         export interface OR {
             eType: 'OR';
-            lhs: MATCH | VALUE;
-            rhs: MATCH | VALUE;
+            lhs?: MATCH | VALUE;
+            rhs?: MATCH | VALUE;
         }
         export interface EXCLUDE {
             eType: 'EXCLUDE';
@@ -257,9 +270,9 @@ export class Parser {
             case 'MATCH_SEP': {
                 let lhs: Parse.Expression.VALUE | Parse.Expression.EXCLUDE | undefined;
                 if(this.stack.length > 0) {
-                    let pExpr = this.stack[this.stack.length - 1];
-                    if(pExpr.eType === 'VALUE' || pExpr.eType === 'EXCLUDE') {
-                        lhs = pExpr;
+                    let prevExpr = this.stack[this.stack.length - 1];
+                    if(prevExpr.eType === 'VALUE' || prevExpr.eType === 'EXCLUDE') {
+                        lhs = prevExpr;
                         this.stack.pop();
                     }
                 }
@@ -276,25 +289,29 @@ export class Parser {
                 if(lhs && rhs) {
                     return {
                         eType: 'MATCH',
+                        mType: 'FULL',
                         property: lhs,
                         value: rhs,
                     };
                 }
                 else if(lhs) {
                     return {
-                        eType: 'MATCH_PROPERTY',
+                        eType: 'MATCH',
+                        mType: 'PROPERTY',
                         property: lhs,
                     };
                 }
                 else if(rhs) {
                     return {
-                        eType: 'MATCH_VALUE',
+                        eType: 'MATCH',
+                        mType: 'VALUE',
                         value: rhs,
                     };
                 }
 
                 return {
-                    eType: 'MATCH_ALL',
+                    eType: 'MATCH',
+                    mType: 'ALL',
                 };
             }
             case 'EXCLUDE': {
@@ -313,27 +330,38 @@ export class Parser {
                     expr,
                 };
             }
-                /*
             case 'AND':
+            case 'OR': {
+                let lhs: Parse.Expression.VALUE | Parse.Expression.MATCH | undefined;
+                if(this.stack.length > 0) {
+                    let prevExpr = this.stack[this.stack.length - 1];
+                    if(prevExpr.eType === 'VALUE' || prevExpr.eType === 'MATCH') {
+                        lhs = prevExpr;
+                        this.stack.pop();
+                    }
+                }
+
+                let rhs = this.nextExpression();
+                if(rhs && (rhs.eType === 'VALUE' || rhs.eType === 'MATCH')) {
+                    this.stack.pop();
+                }
+                else {
+                    rhs = undefined;
+                }
+
                 return {
-                    eType: 'AND',
-                    lhs: this.parseExpression(lexer!.next().value, lexer),
-                    rhs: this.parseExpression(lexer!.next().value, lexer),
+                    eType: token.tType,
+                    lhs,
+                    rhs,
                 };
-            case 'OR':
-                return {
-                    eType: 'OR',
-                    lhs: this.parseExpression(lexer!.next().value, lexer),
-                    rhs: this.parseExpression(lexer!.next().value, lexer),
-                };
-                */
+            }
             default:
-                throw new Error(`UNRECOGNIZED TOKEN '${token.tType}'`);
+                throw new Error(`UNRECOGNIZED TOKEN '${token}'`);
         }
     }
 }
-/*
 
+/*
 function parseQuery(query: string): Query {
     const queryParts = query.split(':');
     const output: Query = {
