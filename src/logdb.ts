@@ -1,8 +1,8 @@
 import {Readable} from 'stream';
 import * as fuzzysort from 'fuzzysort';
 
-import { EMPTY, from, merge, Observable, of } from 'rxjs';
-import { map, mergeMap } from 'rxjs/operators';
+import { EMPTY, from, merge, Observable, of, forkJoin } from 'rxjs';
+import { map, mergeMap, filter, toArray } from 'rxjs/operators';
 
 import { Parse } from './query';
 
@@ -12,8 +12,74 @@ export type LogIdx = number;
 export type PropertyId = string;
 
 export interface LogRecord {
-    log: any;
     idx: LogIdx;
+    log: any;
+    index: LogRecord.Index;
+}
+
+export namespace LogRecord {
+    export interface Index {
+        properties: Set<PropertyId>;
+        values: Map<any, Set<PropertyId>>;
+    }
+
+    export function index(logValue: any, propertyPrefixes?: string[], idx?: Index): Index {
+        // TODO: index arrays and object values themselves, rather than just their children (support query specific values in array, object structures
+        if(!propertyPrefixes) {
+            propertyPrefixes = [];
+        }
+
+        if(!idx) {
+            idx = {
+                properties: new Set(),
+                values: new Map(),
+            }
+        }
+
+        const propertyId: PropertyId = propertyPrefixes.join('.');
+
+        // index property
+        idx.properties.add(propertyId);
+
+        // index values
+        if(Array.isArray(logValue)) {
+            logValue.forEach((v) => {
+                const value =
+                    v === null? 'null':
+                    v === undefined? 'undefined':
+                    v.toString();
+
+                let valueProperties = idx!.values.get(value);
+                if(!valueProperties) {
+                    valueProperties = new Set();
+                }
+
+                valueProperties.add(propertyId);
+                idx!.values.set(value, valueProperties);
+            });
+        }
+        else if (typeof logValue !== 'object' || logValue == undefined) {
+            const value =
+                logValue === null? 'null':
+                logValue === undefined? 'undefined':
+                logValue.toString();
+
+                let valueProperties = idx!.values.get(value);
+                if(!valueProperties) {
+                    valueProperties = new Set();
+                }
+
+                valueProperties.add(propertyId);
+                idx!.values.set(value, valueProperties);
+        }
+        else { // is object
+            Object.keys(logValue).forEach((p) => {
+                index(logValue[p], propertyPrefixes!.concat([p]), idx!);
+            });
+        }
+
+        return idx;
+    }
 }
 
 export interface LogValueMap {
@@ -28,114 +94,261 @@ export interface Filter {
     exclude: Parse.Expression.MATCH[];
 }
 
+// redelcare types we need from fuzzysort, because I can't access the types directly
+export namespace Fuzzysort {
+    export interface Result {
+        readonly score: number;
+        readonly target: string;
+        readonly indexes: number[];
+    }
+}
+
+export interface LogIndex {
+    /** the properties/values sets this value is also used as the key into the index for that type */
+    propertyIndex:  Map<PropertyId, Set<LogIdx>>;
+    properties: PropertyId[];
+
+    // TODO: fuzzysort match.target might always be a string.
+    valueIndex: Map<any, Map<LogIdx, Set<PropertyId>>>;
+    values: any[];
+}
+
+export namespace LogIndex {
+    export function addLogRecord(record: LogRecord, logIndex: LogIndex): LogIndex {
+        record.index.properties.forEach((property) => {
+            addProperty(record.idx, property, logIndex);
+        });
+
+        record.index.values.forEach((propertySet, value) => {
+            propertySet.forEach((property) => {
+                addValue(record.idx, value, property, logIndex);
+            });
+        });
+
+        return logIndex;
+    }
+    export function addProperty(logIdx: LogIdx, property: PropertyId, logIndex: LogIndex): LogIndex {
+        let propertyLogs = logIndex.propertyIndex.get(property);
+        if(!propertyLogs) {
+            propertyLogs = new Set();
+            logIndex.properties.push(property);
+        }
+
+        propertyLogs.add(logIdx);
+        logIndex.propertyIndex.set(property, propertyLogs);
+
+        return logIndex;
+    }
+
+    export function addValue(logIdx: LogIdx, value: any, property: PropertyId, logIndex: LogIndex): LogIndex {
+        // TODO: convert value to string?
+        let valueLogs = logIndex.valueIndex.get(value);
+        if(!valueLogs) {
+            valueLogs = new Map();
+            logIndex.values.push(value);
+        }
+
+        let logProperties = valueLogs.get(logIdx);
+        if(!logProperties) {
+            logProperties = new Set();
+        }
+
+        logProperties.add(property);
+        valueLogs.set(logIdx, logProperties);
+        logIndex.valueIndex.set(value, valueLogs);
+
+        return logIndex;
+    }
+
+    export function union(lhs: LogIndex, rhs: LogIndex): LogIndex {
+        const result: LogIndex = {
+            propertyIndex: new Map(),
+            properties: [],
+            valueIndex: new Map(),
+            values: [],
+        };
+
+        for(const [property, logs] of lhs.propertyIndex) {
+            result.propertyIndex.set(property, new Set(logs));
+        }
+
+        for(const [property, logs] of rhs.propertyIndex) {
+            let propertyLogs = result.propertyIndex.get(property);
+            if(!propertyLogs) {
+                propertyLogs = new Set();
+            }
+
+            logs.forEach((log) => {
+                propertyLogs!.add(log);
+            });
+            result.propertyIndex.set(property, propertyLogs);
+        }
+
+        // TODO: set union could be optimized
+        result.properties = Array.from(new Set([...lhs.properties, ...rhs.properties]));
+
+        for(const [value, logs] of lhs.valueIndex) {
+            const newLogs = new Map();
+            result.valueIndex.set(value, newLogs);
+            for(const [logIdx, properties] of logs) {
+                newLogs.set(logIdx, new Set(properties));
+            }
+        }
+
+        for(const [value, logs] of rhs.valueIndex) {
+            let valueLogs = result.valueIndex.get(value);
+            if(!valueLogs) {
+                valueLogs = new Map();
+            }
+
+            for(const [logIdx, properties] of logs) {
+                let logProperties = valueLogs.get(logIdx);
+                if(!logProperties) {
+                    logProperties = new Set();
+                }
+
+                properties.forEach((property) => {
+                    logProperties!.add(property);
+                });
+
+                valueLogs.set(logIdx, logProperties);
+            }
+
+            result.valueIndex.set(value, valueLogs);
+        }
+
+        // TODO: set union could be optimized
+        result.values = Array.from(new Set([...lhs.values, ...rhs.values]));
+
+        return result;
+    }
+
+}
+
 export interface ResultSet {
     /** dictionary that stores fuzzysort match information about each log. used for text highlighting */
     matches: Map<LogIdx, {
-        property: fuzzysort.Result[];
-        value: fuzzysort.Result[];
+        property: Fuzzysort.Result[];
+        value: Fuzzysort.Result[];
     }>;
 
-    /** the following properties are indexes for logs found in the matches dictionary */
-    propertyIndex:  Map<PropertyId, LogIdx[]>;
-    properties: PropertyId[];
+    index: LogIndex;
+}
 
-    // TODO: fuzzysort match.target might always be a string, breaking this association
-    valueIndex: Map<any, LogIdx[]>;
-    values: any[];
+export namespace ResultSet {
+    export interface Match {
+        logRecord: LogRecord;
+        property?: {
+            name: PropertyId;
+            fuzzyResult: Fuzzysort.Result;
+        }
+        value?: {
+            property: PropertyId;
+            value: any;
+            fuzzyResult: Fuzzysort.Result;
+        }
+    }
+
+    export function addMatch(match: Match, resultSet: ResultSet): ResultSet {
+        let resultMatch = resultSet.matches.get(match.logRecord.idx);
+        if(!resultMatch) {
+            resultMatch = {
+                property: [],
+                value: [],
+            };
+            resultSet.matches.set(match.logRecord.idx, resultMatch);
+        }
+
+        LogIndex.addLogRecord(match.logRecord, resultSet.index);
+
+        if(match.property) {
+            resultMatch.property.push(match.property.fuzzyResult);
+        }
+
+        if(match.value) {
+            resultMatch.value.push(match.value.fuzzyResult);
+        }
+
+        return resultSet;
+    }
+
+    export function union(lhs: ResultSet, rhs: ResultSet): ResultSet {
+        const result: ResultSet = {
+            matches: new Map(),
+            index: LogIndex.union(lhs.index, rhs.index),
+        };
+
+        for(const [logIdx, {property, value}] of lhs.matches) {
+            result.matches.set(logIdx, {
+                property: property.slice(),
+                value: value.slice(),
+            });
+        }
+
+        for(const [logIdx, {property, value}] of rhs.matches) {
+            let matches = result.matches.get(logIdx);
+            if(!matches) {
+                matches = {
+                    property: [],
+                    value: [],
+                };
+            }
+
+            // TODO: we may be duplicating match results here
+            matches.property.push(...property);
+            matches.value.push(...value);
+            result.matches.set(logIdx, matches);
+        }
+
+        return result;
+    }
 }
 
 export class LogDb {
     /** this array contains all the logs, */
     public logs: LogRecord[];
-    public propertyIndex:  {[flatPropertyName: string]: LogIdx[]};
+    public logIndex: LogIndex;
 
-    public allProperties: PropertyId[];
-    public allValues: LogValueMap[]; // TODO: we should probably combine identical values into a single entry in the array, which lists all logs that contain this exact value
     public fuzzysortThreshold: number;
-
-    public resultSet: ResultSet;
 
     constructor() {
         this.logs = [];
-        this.propertyIndex = {};
-        this.allProperties = [];
-        this.allValues = [];
+        this.logIndex = {
+            propertyIndex: new Map(),
+            properties: [],
+            valueIndex: new Map(),
+            values: [],
+        };
         this.fuzzysortThreshold = -100;
     }
 
     /** parses a raw string, then records it in the database and indexes it */
     public ingest(line: string) {
 
+        const log = parseLog(line);
         const record = {
-            log: parseLog(line),
+            log, 
             idx: this.logs.length,
+            index: LogRecord.index(log),
         };
+
         this.logs.push(record);
 
-        const indexResults = this.indexLog(record, record.log);
+        LogIndex.addLogRecord(record, this.logIndex);
         // filterSingleLog(queryTextBuffer.getText(), logOffset, indexResults.properties, indexResults.values);
     }
 
-    protected indexLog(record: LogRecord, logValue: any, propertyPrefixes?: string[]): void {
-        // TODO: index arrays and object values themselves, rather than just their children (support query specific values in array, object structures
-        if(!propertyPrefixes) {
-            propertyPrefixes = [];
-        }
-
-        // index property
-        const propertyId: PropertyId = propertyPrefixes.join('.');
-
-        if(!this.propertyIndex[propertyId]) {
-            this.allProperties.push(propertyId);
-            this.propertyIndex[propertyId] = [];
-        }
-
-        this.propertyIndex[propertyId].push(record.idx);
-
-        // index values
-        const values = [];
-        if(Array.isArray(logValue)) {
-            logValue.forEach((v) => {
-                const value =
-                    v === null? 'null':
-                    v === undefined? 'undefined':
-                    v.toString();
-
-                values.push({
-                    value,
-                    property: propertyId,
-                    idx: record.idx,
-                });
-            });
-        }
-        else if (typeof logValue !== 'object' || logValue == undefined) {
-            const value =
-                logValue === null? 'null':
-                logValue === undefined? 'undefined':
-                logValue.toString();
-
-            values.push({
-                value,
-                property: propertyId,
-                idx: record.idx,
-            });
-        }
-        else { // is object
-            Object.keys(logValue).forEach((p) => {
-                this.indexLog(record, logValue[p], propertyPrefixes!.concat([p]));
-            });
-        }
-
-        this.allValues.push(...values);
-    }
-
-    public filter(query: Parse.Expression, searchSet?: ResultSet): ResultSet {
+    public filter(query: Parse.Expression, searchSet?: ResultSet): Observable<ResultSet> {
         if(!searchSet) {
-            searchSet = this.searchSet;
+            searchSet = {
+                matches: new Map(),
+                index: this.logIndex,
+            };
         }
 
         switch(query.eType) {
             case 'VALUE':
+                // filtering on just a VALUE expression searches the term as a property OR value
                 return this.filter({
                         eType: 'OR',
                     lhs: {
@@ -150,7 +363,8 @@ export class LogDb {
                     }
                 }, searchSet);
             case 'EXCLUDE':
-                return this.fitler({
+                // filtering on just an EXCLUDE expression excludes matches in the property AND value fields
+                return this.filter({
                     eType: 'AND',
                     lhs: {
                         eType: 'MATCH',
@@ -160,19 +374,41 @@ export class LogDb {
                     rhs: {
                         eType: 'MATCH',
                         mType: 'VALUE',
-                        property: query
+                        value: query
                     }
                 }, searchSet);
             case 'MATCH':
                 return this.filterMatch(query, searchSet);
             case 'AND':
                 // return the intersection of results
-                return this.filterMatch(query.rhs, this.filterMatch(query.lhs, searchSet);
+                return query.lhs?
+                    this.filter(query.lhs, searchSet):
+                    of(searchSet)
+                .pipe(
+                    mergeMap((resultSet) => {
+                        return query.rhs?
+                            this.filter(query.rhs, resultSet):
+                            of(resultSet);
+                    })
+                );
             case 'OR': {
-                const lhsResultSet = this.filterMatch(query.lhs, searchSet);
-                const rhsResultSet = this.filterMatch(query.rhs, searchSet);
-                // TODO: return the union of results
-                return searchSet;
+                // return the union of results
+                const lhsResultSet = query.lhs?
+                    this.filter(query.lhs, searchSet):
+                    of(searchSet);
+                const rhsResultSet = query.rhs?
+                    this.filter(query.rhs, searchSet):
+                    of(searchSet);
+
+                return forkJoin(lhsResultSet, rhsResultSet).pipe(
+                    map(([lhs, rhs]) => {
+                        if(lhs === rhs) {
+                            return lhs;
+                        }
+
+                        return ResultSet.union(lhs, rhs);
+                    })
+                );
             }
             default:
                 throw new Error(`Unrecognized expression: ${query}`);
@@ -183,162 +419,206 @@ export class LogDb {
     // for each MATCH in the filter, in the remaining result set:
     // 1. evaluate FULL MATCHES that may include exclude clauses, and PROPERTY and VALUE matches that do not contain an exclude
     // 2. evaluate PROPERTY and VALUE matches that contain an EXCLUDE.
-    public filterMatch(match: Parse.Expression.MATCH, searchSet: ResultSet): Observable<ResultSet> {
-        if((match.mType === 'FULL' || match.mType === 'PROPERTY')
-            && match.property.eType !== 'EXCLUDE') {
+    public filterMatch(matchQuery: Parse.Expression.MATCH, searchSet: ResultSet): Observable<ResultSet> {
+        let matches: Observable<ResultSet.Match>;
+        if((matchQuery.mType === 'FULL' || matchQuery.mType === 'PROPERTY')
+            && matchQuery.property.eType !== 'EXCLUDE') {
             // search by property index
-            return from(fuzzysort.goAsync(match.property, searchSet.propertyNames, {
+            matches = from(fuzzysort.goAsync(matchQuery.property.value, searchSet.index.properties, {
                 // limit: 100,
                 threshold: this.fuzzysortThreshold,
             })).pipe(
-                map((propertyMatches) => {
-                    return propertyMatches.reduce((resultSet, propertyMatch) => {
-                        searchSet.propertyIndex[propertyMatch.target].forEach((logIdx) => {
-                            if(match.mType === 'FULL') {
-                                const log = this.logs[logIdx];
-                                const value = getProperty(log, propertyMatch.target);
-                                const valueMatch = fuzzysort.go(match.value, [value], {threshold: this.fuzzysortThreshold});
-                                if((match.value.eType === 'EXCLUDE' && valueMatch.length > 0)
-                                    || (match.value.eType !== 'EXCLUDE' && valueMatch.length === 0)) {
+                mergeMap(from),
+                mergeMap((propertyMatch) => {
+                    const matchedLogs = searchSet.index.propertyIndex.get(propertyMatch.target);
+                    if(!matchedLogs) {
+                        throw new Error(`filterMatch: The property '${propertyMatch.target}' was matched by fuzzysort, but was not found in the index. This should not happen, and means the index got into an invalid state due to a bug.`);
+                    }
+
+                    const matches = Array.from(matchedLogs).map((logIdx) => {
+                        const log = this.logs[logIdx];
+                        let match: ResultSet.Match = {
+                            logRecord: log,
+                            property: {
+                                name: propertyMatch.target,
+                                fuzzyResult: propertyMatch,
+                            }
+                        };
+
+                        if(matchQuery.mType === 'FULL') {
+                            const value = getProperty(log, propertyMatch.target);
+                            const searchValue = matchQuery.value.eType === 'VALUE'?
+                                matchQuery.value.value:
+                                matchQuery.value.expr.value;
+                            const valueMatch = fuzzysort.go(searchValue, [value], {threshold: this.fuzzysortThreshold});
+                            if(matchQuery.value.eType === 'EXCLUDE') {
+                                if(valueMatch.length > 0) {
                                     // no match
                                     return;
                                 }
-                                else {
-                                    // matched property and value
-                                    // add value to the index and matches
-                                    // TODO: there's a lot of repetition here
-                                    // I think we should be able to reorder these things so we only have to set "matches" once
-                                    let resultMatch = resultSet.matches.get(logIdx);
-                                    if(!resultMatch) {
-                                        resultMatch = {
-                                            property: [],
-                                            value: [],
-                                        };
-                                    }
-                                    resultMatch.value.push(propertyMatch);
-                                    resultSet.matches.set(logIdx, resultMatch);
-
-                                    let resultValueIndex = resultSet.valueIndex.get(value);
-                                    if(!resultValueIndex) {
-                                        resultValueIndex = [];
-                                        values.push(value);
-                                    }
-
-                                    resultValueIndex.push(logIdx);
-                                    resultSet.valueIndex.set(value, resultValueIndex);
-                                }
                             }
-
-                            let resultMatch = resultSet.matches.get(logIdx);
-                            if(!resultMatch) {
-                                resultMatch = {
-                                    property: [],
-                                    value: [],
+                            else if(valueMatch.length > 0) {
+                                match.value = {
+                                    property: propertyMatch.target,
+                                    value,
+                                    fuzzyResult: valueMatch[0],
                                 };
                             }
+                        }
 
-                            // property match! add proeprty to index and matches
-                            resultMatch.property.push(propertyMatch);
-                            resultSet.matches.set(logIdx, resultMatch);
+                        return match;
+                    }).filter((match): match is ResultSet.Match => match != undefined);
 
-                            let resultPropertyIndex = resultSet.propertyIndex.get(propertyMatch.target);
-                            if(!resultPropertyIndex) {
-                                resultPropertyIndex = [];
-                                properties.push(propertyMatch.target);
-                            }
-
-                            resultPropertyIndex.push(logIdx);
-                            resultSet.propertyIndex.set(propertyMatch.target, resultPropertyIndex);
-                        });
-
-                    }, {
-                        matches: new Map(),
-                        propertyIndex: new Map(),
-                        properties: [],
-                        valueIndex: new Map(),
-                        values: []
-                    } as ResultSet);
+                    return from(matches);
                 })
             );
         }
-        else if((match.mType === 'FULL' || match.mType === 'VALUE')
-            && match.value.eType !== 'EXCLUDE') {
+        else if((matchQuery.mType === 'FULL' || matchQuery.mType === 'VALUE')
+            && matchQuery.value.eType !== 'EXCLUDE') {
             // search by value index
+            matches = from(fuzzysort.goAsync(matchQuery.value.value, searchSet.index.values, {
+                // limit: 100,
+                threshold: this.fuzzysortThreshold,
+            })).pipe(
+                mergeMap(from),
+                mergeMap((valueMatch) => {
+                    const matchedLogs = searchSet.index.valueIndex.get(valueMatch.target);
+                    if(!matchedLogs) {
+                        throw new Error(`filterMatch: The value '${valueMatch.target}' was matched by fuzzysort, but was not found in the index. This should not happen, and means the index got into an invalid state due to a bug.`);
+                    }
+
+                    const matches = Array.from(matchedLogs).reduce((logMatches, [logIdx, propertySet]) => {
+                        const newLogMatches = Array.from(propertySet).map((property) => {
+                            let match: ResultSet.Match = {
+                                logRecord: this.logs[logIdx],
+                                value: {
+                                    property,
+                                    value: valueMatch.target,
+                                    fuzzyResult: valueMatch,
+                                }
+                            };
+
+                            if(matchQuery.mType === 'FULL') {
+                                const searchProperty = matchQuery.property.eType === 'VALUE'?
+                                    matchQuery.property.value:
+                                    matchQuery.property.expr.value;
+
+                                const propertyMatch = fuzzysort.go(searchProperty, [property], {threshold: this.fuzzysortThreshold});
+                                if(matchQuery.property.eType === 'EXCLUDE') {
+                                    if(propertyMatch.length > 0) {
+                                        // no match
+                                        return;
+                                    }
+                                }
+                                else if(propertyMatch.length > 0) {
+                                    match.property = {
+                                        name: property,
+                                        fuzzyResult: propertyMatch[0],
+                                    };
+                                }
+                            }
+
+                            return match;
+                        }).filter((match): match is ResultSet.Match => match != undefined);
+
+                        logMatches.push(...newLogMatches);
+                        return logMatches;
+                    }, [] as ResultSet.Match[]);
+
+                    return from(matches);
+                })
+            );
         }
-        else if(match.mType === 'FULL') {
+        else if(matchQuery.mType === 'FULL') {
             // both fields are excluded
             // this query doesn't make any sense, don't do anything
             return of(searchSet);
         }
-        else if(match.mType === 'PROPERTY') {
+        else if(matchQuery.mType === 'PROPERTY') {
             // must be an exclude property
-        }
-        else if(match.mType === 'VALUE') {
-            // must be an exclude value
-        }
-    }
-
-
-            return from(fuzzysort.goAsync(match.property, resultSet.propertyNames, {
+            matches = from(fuzzysort.goAsync((matchQuery.property as Parse.Expression.EXCLUDE).expr.value, searchSet.index.properties, {
                 // limit: 100,
                 threshold: this.fuzzysortThreshold,
             })).pipe(
                 mergeMap((propertyMatches) => {
-                    return merge(propertyMatches.map((propertyMatch) => {
-                        const log = this.logs[this.propertyIndex[propertyMatch.target]];
-                        const value = getProperty(log, propertyMatch.target);
-                        if(match.mType === 'FULL') {
-                            if(match.value.eType === 'VALUE') {
-                            const valueMatch = fuzzysort.go(match.value, [value], {threshold: this.fuzzysortThreshold});
-                            if(valueMatch.length === 0) {
-                                // the value did not match the queried value
-                                return EMPTY;
-                            }
+                    const excludes = propertyMatches.reduce((excludes, propertyMatch) => {
+                        const matchedLogs = searchSet.index.propertyIndex.get(propertyMatch.target);
+                        if(!matchedLogs) {
+                            throw new Error(`filterMatch: The property '${propertyMatch.target}' was matched by fuzzysort, but was not found in the index. This should not happen, and means the index got into an invalid state due to a bug.`);
                         }
 
-                            return {
-                                expr: match,
-                                matchResult: propertyMatch,
-                                property: propertyMatch.target,
-                                value,
-                                log,
-                            };
-                        }));
-                    })
-                );
+                        matchedLogs.forEach((logIdx) => {
+                            excludes.add(logIdx);
+                        });
 
-            switch(match.mType) {
-                case 'FULL':
-                case 'PROPERTY':
-                case 'VALUE':
-                    return from(fuzzysort.goAsync(match.value, this.allValues, {
-                        key: 'value',
-                        limit: 100,
-                        threshold: this.fuzzysortThreshold,
-                    })).pipe(
-                        mergeMap((valueMatches) => {
-                            return merge(valueMatches.map((valueMatch) => {
-                                const target: LogValueMap = valueMatch.target;
-                                const log = this.logs[valueMatch.target.idx];
+                        return excludes;
+                    }, new Set<LogIdx>());
 
-                                return {
-                                    expr: match,
-                                    matchResult: valueMatch,
-                                    property: target.property,
-                                    value: target.value,
-                                    log,
-                                };
-                            }));
-                        })
-                    );
-                case 'ALL':
-                    return EMPTY; // TODO: should just return all the results i guess
-            }
-        }));
+                    const matches: ResultSet.Match[] = [];
+                    for(let i = 0; i < this.logs.length; i++) {
+                        const log = this.logs[i];
+                        if(!excludes.has(log.idx)) {
+                            matches.push({
+                                logRecord: log,
+                            });
+                        }
+                    }
 
-        // cull matches that are excluded
-        
-        return matchedLogs;
+                    return from(matches);
+                }),
+            );
+        }
+        else if(matchQuery.mType === 'VALUE') {
+            // must be an exclude value
+            matches = from(fuzzysort.goAsync((matchQuery.value as Parse.Expression.EXCLUDE).expr.value, searchSet.index.values, {
+                // limit: 100,
+                threshold: this.fuzzysortThreshold,
+            })).pipe(
+                mergeMap((valueMatches) => {
+                    const excludes = valueMatches.reduce((excludes, valueMatch) => {
+                        const matchedLogs = searchSet.index.valueIndex.get(valueMatch.target);
+                        if(!matchedLogs) {
+                            throw new Error(`filterMatch: The value '${valueMatch.target}' was matched by fuzzysort, but was not found in the index. This should not happen, and means the index got into an invalid state due to a bug.`);
+                        }
+
+                        for(const logIdx of matchedLogs.keys()) {
+                            excludes.add(logIdx);
+                        }
+
+                        return excludes;
+                    }, new Set<LogIdx>());
+
+                    const matches: ResultSet.Match[] = [];
+                    for(let i = 0; i < this.logs.length; i++) {
+                        const log = this.logs[i];
+                        if(!excludes.has(log.idx)) {
+                            matches.push({
+                                logRecord: log,
+                            });
+                        }
+                    }
+
+                    return from(matches);
+                }),
+            );
+        }
+
+        return matches!.pipe(
+            toArray(),
+            map((matches) => {
+                return matches.reduce((resultSet, match) => {
+                    return ResultSet.addMatch(match, resultSet);
+                }, {
+                    matches: new Map(),
+                    index: {
+                        propertyIndex:  new Map(),
+                        properties: [],
+                        valueIndex: new Map(),
+                        values: [],
+                    }
+                } as ResultSet);
+            })
+        );
     }
 
     // meta-filter steps:
@@ -353,6 +633,7 @@ export class LogDb {
     // 1. evaluate FULL MATCHES that may include exclude clauses, and PROPERTY and VALUE matches that do not contain an exclude
     // 2. evaluate PROPERTY and VALUE matches that contain an EXCLUDE.
 
+    /*
     public filter(f: Filter): Observable<{match: fuzzysort.Result, log: LogRecord}> {
         // TODO: add ability to cancel searches
         // TODO: there are problems with this currently:
@@ -422,6 +703,7 @@ export class LogDb {
         
         return matchedLogs;
     }
+    */
 }
 
 /** turn a raw string into a json object
@@ -454,12 +736,12 @@ function parseErrorLog(line: string) {
  * @argument obj - root object
  * @argument propertyName - name of the property to retrieved. Nested properties are specified with dot notation ('a.b.c')
  */
-function getProperty(obj: object, propertyId: PropertyId) {
+function getProperty(obj: {[property: string]: any}, property: PropertyId): any {
     if(!obj) {
         return undefined;
     }
 
-    const properties = propertyName.split('.');
+    const properties = property.split('.');
     const value = obj[properties[0]];
     if(properties.length === 1) {
         return value;
