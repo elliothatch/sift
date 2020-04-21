@@ -4,7 +4,8 @@
   "main": "build/index.js",
   "scripts": {
     "build": "node node_modules/.bin/tsc",
-    "start": "node build/index.js",
+    "start": "node build/src/index.js",
+    "dev": "node build/src/index.js scripts/dev.test.js",
     "debug": "node --inspect-brk build/index.js",
     "test": "node_modules/jest/bin/jest.js"
   },

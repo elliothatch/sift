@@ -227,15 +227,15 @@ export namespace LogIndex {
 
 export interface ResultSet {
     /** dictionary that stores fuzzysort match information about each log. used for text highlighting */
-    matches: Map<LogIdx, {
-        property: Fuzzysort.Result[];
-        value: Fuzzysort.Result[];
-    }>;
-
+    matches: ResultSet.MatchMap;
     index: LogIndex;
 }
 
 export namespace ResultSet {
+    export type MatchMap = Map<LogIdx, {
+        property: Fuzzysort.Result[];
+        value: Fuzzysort.Result[];
+    }>;
     export interface Match {
         logRecord: LogRecord;
         property?: {
@@ -338,6 +338,7 @@ export class LogDb {
         // filterSingleLog(queryTextBuffer.getText(), logOffset, indexResults.properties, indexResults.values);
     }
 
+    // TODO: return an observable of Result instead of resultset, so we can stream each match in as its found. this requires knowing that there are no more AND clauses that a particular log might be filtered by. generally a different approach to how we handle query execution, and will require some reworking
     public filter(query: Parse.Expression, searchSet?: ResultSet): Observable<ResultSet> {
         if(!searchSet) {
             searchSet = {

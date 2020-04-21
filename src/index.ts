@@ -3,7 +3,10 @@ import { createInterface, Interface } from 'readline';
 
 import { spawn, ChildProcessWithoutNullStreams } from 'child_process';
 
-import { Display, Panel } from './display';
+import { Display } from './display';
+import { Panel } from './panel';
+import { LogDb } from './logdb';
+import { Parser } from './query';
 /*
 const AlertColors: {[level: string]: AlertColor } = {};
 
@@ -52,6 +55,9 @@ const errorStream = readline.createInterface({
 const display = new Display();
 display.init();
 
+const logdb = new LogDb();
+const parser = new Parser();
+
 display.terminal.on('key', (name: any, matches: any, data: any) => {
 	try {
 		if(name === 'CTRL_C') {
@@ -76,6 +82,18 @@ display.terminal.on('key', (name: any, matches: any, data: any) => {
         else if(data.isCharacter) {
             display.queryPanel.buffer.insert(name);
             Panel.draw(display.queryPanel);
+            // TODO: create special class/functions LogPanel, that allow adding/removing/setting logs, scrolling, and display options like expanded
+            // try {
+            const expr = parser.parse(display.queryPanel.buffer.getText());
+            logdb.filter(expr[0]).subscribe({
+                next: (results) => {
+                },
+                error: (err) => {
+                    display.terminal.fullscreen(false);
+                    console.error(err);
+                }
+            });
+            // }
         }
     }
 	catch(err) {
@@ -87,7 +105,8 @@ display.terminal.on('key', (name: any, matches: any, data: any) => {
 
 display.draw();
 
-const targetProcess = createProcess(process.argv[1], process.argv.slice(2));
-targetProcess.stdoutInterface.on('line', (line) => {
-});
+// const targetProcess = createProcess(process.argv[2], process.argv.slice(3));
+// targetProcess.stdoutInterface.on('line', (line) => {
+    // logdb.ingest(line);
+// });
 
