@@ -8,6 +8,7 @@ export class Display {
 
     public rootPanel: Panel<ScreenBuffer>;
     public logPanel: Panel<ScreenBuffer>;
+    public logDisplayPanel: Panel.LogDisplay;
     public statusBar: Panel<ScreenBuffer>;
     public queryResults: Panel<ScreenBuffer>;
     public processPanel: Panel<ScreenBuffer>;
@@ -33,6 +34,16 @@ export class Display {
 
         Panel.addChild(this.rootPanel, this.logPanel);
 
+        this.logDisplayPanel = Panel.createLogDisplayPanel(this.logPanel.buffer, {
+            name: 'logDisplay',
+            width: 1,
+            height: 1,
+            flex: {width: true, height: true},
+        });
+
+        Panel.addChild(this.logPanel, this.logDisplayPanel);
+
+        /*
         Panel.addChild(this.logPanel, Panel.createScreenPanel(this.logPanel.buffer, {
             name: 'log1',
             width: 1,
@@ -45,6 +56,7 @@ export class Display {
             height: 1,
             flex: { width: true, height: true },
         }));
+        */
 
         this.statusBar = Panel.createScreenPanel(this.rootPanel.buffer, {
             name: 'statusbar',
@@ -94,14 +106,14 @@ export class Display {
     }
 
     public draw() {
-        this.rootPanel.buffer.fill({char: '1', attr: {color: 'black', bgColor: 'red'}});
-        this.logPanel.buffer.fill({char: '2', attr: {color: 'black', bgColor: 'green'}});
-        (this.logPanel.children![0].buffer as ScreenBuffer).fill({char: '3', attr: {color: 'black', bgColor: 'blue'}});
-        (this.logPanel.children![1].buffer as ScreenBuffer).fill({char: '4', attr: {color: 'black', bgColor: 'yellow'}});
-        this.statusBar.buffer.fill({char: '5', attr: {color: 'black', bgColor: 'green'}});
-        this.queryResults.buffer.fill({char: '6', attr: {color: 'black', bgColor: 'brightred'}});
-        this.processPanel.buffer.fill({char: '7', attr: {color: 'black', bgColor: 'yellow'}});
-        // this.queryPanel.buffer.fill({char: '8', attr: {color: 'black', bgColor: 'white'}});
+        // this.rootPanel.buffer.fill({char: '1', attr: {color: 'black', bgColor: 'red'}});
+        // this.logPanel.buffer.fill({char: '2', attr: {color: 'black', bgColor: 'green'}});
+        this.logDisplayPanel.idxPanel.buffer.dst.fill({char: '3', attr: {color: 'black', bgColor: 'green'}});
+        this.logDisplayPanel.logPanel.buffer.dst.fill({char: '4', attr: {color: 'black', bgColor: 'blue'}});
+        // this.statusBar.buffer.fill({char: '5', attr: {color: 'black', bgColor: 'green'}});
+        // this.queryResults.buffer.fill({char: '6', attr: {color: 'black', bgColor: 'brightred'}});
+        // this.processPanel.buffer.fill({char: '7', attr: {color: 'black', bgColor: 'yellow'}});
+        // this.queryPanel.buffer.dst.fill({char: '8', attr: {color: 'black', bgColor: 'white'}});
 
         Panel.redrawChildren(this.rootPanel);
     }

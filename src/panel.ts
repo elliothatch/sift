@@ -77,8 +77,15 @@ export namespace Panel {
         if(panel.children) {
             panel.children.forEach(redrawChildren);
         }
+
         panel.buffer.draw();
         panel.buffer.drawCursor();
+
+        if(panel.buffer instanceof TextBuffer) {
+            panel.buffer.dst.draw();
+            panel.buffer.dst.drawCursor();
+        }
+
     }
 
     /** returns the screen buffer if it is one, or the dst buffer of a TextBuffer */
@@ -106,6 +113,11 @@ export namespace Panel {
             width: panel.calculatedWidth!,
             height: panel.calculatedHeight!,
         });
+
+        if(panel.buffer instanceof TextBuffer) {
+            (panel.buffer as any).width = panel.calculatedWidth;
+            (panel.buffer as any).height = panel.calculatedHeight;
+        }
 
         if(panel.children) {
             const flexChildren: Panel<Buffer>[] = [];
@@ -204,6 +216,7 @@ export namespace Panel {
          * Even though screenbuffer has its own implementation of scrolling, we don't use it, because screenbuffer also stores attr data for every line, which isn't reasonable for a large number of logs
          */
         export function print(logDisplay: LogDisplay, scrollOffset: number): void {
+            // TODO: implement scrolling, reset display properly
             const printOptions: PrintOptions = {
                 dst: logDisplay.logPanel.buffer,
                 matches: logDisplay.matches,
@@ -223,20 +236,38 @@ export namespace Panel {
         }
 
         export function printLog(record: LogRecord, printOptions: PrintOptions): number {
+            const messageColor = record.log && record.log.level?
+                printOptions.logLevelColors[record.log.level]:
+                printOptions.logLevelColors.info;
+
             if(record.log.timestamp) {
+                printOptions.dst.insert('[', {color: messageColor, dim: true});
+                printHighlightedText(record.log.timestamp, printOptions.dst, [], {color: messageColor, dim: true}, {color: 'blue'});
+                printOptions.dst.insert(']', {color: messageColor, dim: true});
             }
 
             if(record.log.level) {
+                printOptions.dst.insert('[', {color: messageColor, dim: true});
+                printHighlightedText(record.log.level, printOptions.dst, [], {color: messageColor, dim: true}, {color: 'blue'});
+                printOptions.dst.insert(']', {color: messageColor, dim: true});
             }
 
             if(record.log.message) {
+                printHighlightedText(record.log.message, printOptions.dst, [], {color: messageColor}, {color: 'blue'});
             }
 
             let linesPrinted = 1;
             if(printOptions.expandedView) {
-                // TODO: don't print fields that we already printed
+                // copy top-level properties of the log and delete properties we don't want displayed in the expanded view
+                // TODO: make this a user configurable whitelist/blacklist
+                const expandedLog = Object.assign({}, record.log);
+                delete expandedLog.level;
+                delete expandedLog.message;
+                delete expandedLog.pid;
+                delete expandedLog.timestamp;
+
                 linesPrinted -= 1;// TODO: remove this line
-                linesPrinted += printJson(record.log, printOptions);
+                linesPrinted += printJson(expandedLog, printOptions);
             }
 
             return linesPrinted;
@@ -367,7 +398,6 @@ export namespace Panel {
             flex: {
                 height: true,
             },
-            flexCol: true
         });
 
         const logPanel = createTextPanel(panel.buffer, {
@@ -382,6 +412,9 @@ export namespace Panel {
         // TODO: width/height calculation is wrong if FLEX enabled?? */
 
         const logDisplayPanel = Object.assign(panel, {
+            options: Object.assign(options, {
+                flexCol: true,
+            }),
             idxPanel,
             logPanel,
             logs: [],
