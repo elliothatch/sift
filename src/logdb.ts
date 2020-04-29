@@ -233,8 +233,8 @@ export interface ResultSet {
 
 export namespace ResultSet {
     export type MatchMap = Map<LogIdx, {
-        property: Fuzzysort.Result[];
-        value: Fuzzysort.Result[];
+        property: Match[];
+        value: Match[];
     }>;
     export interface Match {
         logRecord: LogRecord;
@@ -262,11 +262,11 @@ export namespace ResultSet {
         LogIndex.addLogRecord(match.logRecord, resultSet.index);
 
         if(match.property) {
-            resultMatch.property.push(match.property.fuzzyResult);
+            resultMatch.property.push(match);
         }
 
         if(match.value) {
-            resultMatch.value.push(match.value.fuzzyResult);
+            resultMatch.value.push(match);
         }
 
         return resultSet;
@@ -422,7 +422,10 @@ export class LogDb {
     // 2. evaluate PROPERTY and VALUE matches that contain an EXCLUDE.
     public filterMatch(matchQuery: Parse.Expression.MATCH, searchSet: ResultSet): Observable<ResultSet> {
         let matches: Observable<ResultSet.Match>;
-        if((matchQuery.mType === 'FULL' || matchQuery.mType === 'PROPERTY')
+        if(matchQuery.mType === 'ALL') {
+            return of(searchSet);
+        }
+        else if((matchQuery.mType === 'FULL' || matchQuery.mType === 'PROPERTY')
             && matchQuery.property.eType !== 'EXCLUDE') {
             // search by property index
             matches = from(fuzzysort.goAsync(matchQuery.property.value, searchSet.index.properties, {
@@ -603,8 +606,11 @@ export class LogDb {
                 }),
             );
         }
+        else {
+            throw new Error(`filterMatch: unhandled match query: ${matchQuery}`);
+        }
 
-        return matches!.pipe(
+        return matches.pipe(
             toArray(),
             map((matches) => {
                 return matches.reduce((resultSet, match) => {

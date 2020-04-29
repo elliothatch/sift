@@ -5,7 +5,7 @@ import { spawn, ChildProcessWithoutNullStreams } from 'child_process';
 
 import { Display } from './display';
 import { Panel } from './panel';
-import { LogDb } from './logdb';
+import { LogDb, LogRecord } from './logdb';
 import { Parser } from './query';
 /*
 const AlertColors: {[level: string]: AlertColor } = {};
@@ -74,11 +74,13 @@ display.terminal.on('key', (name: any, matches: any, data: any) => {
 			display.queryPanel.buffer.backDelete(1);
 			// filterLogs(queryTextBuffer.getText());
 			display.queryPanel.draw();
+			onQueryChanged(display.queryPanel.buffer.getText());
 		}
 		else if(name === 'DELETE') {
 			display.queryPanel.buffer.delete(1);
 			// filterLogs(queryTextBuffer.getText());
 			display.queryPanel.draw();
+			onQueryChanged(display.queryPanel.buffer.getText());
 		}
 		else if(name === 'TAB') {
 		    // TODO: make this per-panel based on focus
@@ -92,15 +94,7 @@ display.terminal.on('key', (name: any, matches: any, data: any) => {
             display.queryPanel.draw();
             // TODO: create special class/functions LogPanel, that allow adding/removing/setting logs, scrolling, and display options like expanded
             // try {
-            const expr = parser.parse(display.queryPanel.buffer.getText());
-            logdb.filter(expr[0]).subscribe({
-                next: (results) => {
-                },
-                error: (err) => {
-                    exitLogs.push({level: 'error', message: err});
-                    close();
-                }
-            });
+			onQueryChanged(display.queryPanel.buffer.getText());
             // }
         }
     }
@@ -141,9 +135,58 @@ logDisplayPanel.print(0);
 logDisplayPanel.redrawChildren();
 logDisplayPanel.draw();
 
+function onQueryChanged(query: string) {
+    const expr = parser.parse(query);
+    if(expr.length > 0) {
+        exitLogs.push({message: expr[0]});
+        logdb.filter(expr[0]).subscribe({
+            next: (results) => {
+                // javascript please add an ordered set to the std library
+                if(results.matches.size === 0 && results.index.properties.length > 0) {
+                    // this is bad and confusing, but some queries that match ALL logs
+                    // return a resultSet with 0 matches. this is because there is no highlight data
+                    // (e.g. because an empty search ":" has nothing to "match")
+                    // you can tell it's not actually an empty result set because the index is populated
+                    logDisplayPanel.matches = undefined;
+                    logDisplayPanel.logs = logdb.logs;
+                }
+                else {
+                    const displayedLogs: LogRecord[] = [];
+                    results.matches.forEach((matches, logIdx) => displayedLogs.push(logdb.logs[logIdx]));
+                    displayedLogs.sort((a, b) => a.idx - b.idx);
+                    logDisplayPanel.matches = results.matches;
+                    logDisplayPanel.logs = displayedLogs;
+                }
+                logDisplayPanel.print(0);
+                logDisplayPanel.redrawChildren();
+                logDisplayPanel.draw();
+            },
+            error: (err) => {
+                exitLogs.push({level: 'error', message: err});
+                close();
+            }
+        });
+    }
+    else {
+        logDisplayPanel.logs = logdb.logs;
+        logDisplayPanel.matches = undefined;
+        logDisplayPanel.print(0);
+    }
 
-exitLogs.push({message: display.queryResults.calculatedWidth});
-exitLogs.push({message: (display.queryResults.buffer as any).width});
+    logDisplayPanel.redrawChildren();
+    logDisplayPanel.draw();
+
+    (display.queryResults.buffer as any).setText('');
+    (display.queryResults.buffer as any).moveTo(0, 0);
+    display.queryResults.buffer.insert(`${logDisplayPanel.logs.length}/${logdb.logs.length}`);
+
+    display.queryResults.draw();
+}
+
+
+
+// exitLogs.push({message: display.queryResults.calculatedWidth});
+// exitLogs.push({message: (display.queryResults.buffer as any).width});
 
 function close() {
     display.terminal.fullscreen(false);

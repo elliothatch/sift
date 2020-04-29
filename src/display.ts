@@ -10,9 +10,8 @@ export class Display {
     public logPanel: ScreenPanel;
     public logDisplayPanel: LogDisplayPanel;
     public statusBar: ScreenPanel;
-    public queryResults: ScreenPanel;
+    public queryResults: TextPanel;
     public processPanel: ScreenPanel;
-
     public queryPanel: TextPanel;
 
     constructor(term?: Terminal) {
@@ -67,7 +66,7 @@ export class Display {
         });
         this.rootPanel.addChild(this.statusBar);
 
-        this.queryResults = new ScreenPanel(this.rootPanel.buffer, {
+        this.queryResults = new TextPanel(this.rootPanel.buffer, {
             name: 'queryresults',
             width: 5,
             height: 1,
@@ -86,7 +85,8 @@ export class Display {
             name: 'query',
             width: 1,
             height: 1,
-            flex: { width: true }
+            flex: { width: true },
+            drawCursor: true,
         });
         this.rootPanel.addChild(this.queryPanel);
 

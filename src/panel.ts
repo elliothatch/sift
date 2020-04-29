@@ -1,7 +1,6 @@
 import {Attributes, Terminal, Buffer, ScreenBuffer, TextBuffer} from 'terminal-kit';
 
-import {LogRecord} from './logdb';
-import {ResultSet} from './logdb';
+import {LogRecord, LogIdx, PropertyId, ResultSet} from './logdb';
 
 export namespace Panel {
     export interface Options {
@@ -237,7 +236,7 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
         }));
         this.idxPanel = new TextPanel(this.buffer, {
             name: `${this.options.name? this.options.name: ''}.idxPanel`,
-            width: logDisplayOptions && logDisplayOptions.idxWidth || 4,
+            width: logDisplayOptions && logDisplayOptions.idxWidth || 6,
             height: 1,
             flex: {
                 height: true,
@@ -277,7 +276,16 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
      * Even though screenbuffer has its own implementation of scrolling, we don't use it, because screenbuffer also stores attr data for every line, which isn't reasonable for a large number of logs
      */
     public print(scrollOffset: number): void {
-        // TODO: implement scrolling, reset display properly
+        // reset display
+        (this.logPanel.buffer as any).setText('');
+        (this.logPanel.buffer as any).moveTo(0, 0);
+
+        (this.idxPanel.buffer as any).setText('');
+        (this.idxPanel.buffer as any).moveTo(0, 0);
+        // this.logPanel.buffer.dst.clear();
+        // this.idxPanel.buffer.dst.clear();
+
+        // TODO: implement scrolling
         const printOptions: LogDisplayPanel.PrintOptions = {
             dst: this.logPanel.buffer,
             matches: this.matches,
@@ -289,7 +297,13 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
             const linesPrinted = LogDisplayPanel.printLog(record, printOptions);
             this.logPanel.buffer.newLine();
 
-            this.idxPanel.buffer.insert(record.idx.toString());
+            const idxStr = record.idx.toString();
+            // right align
+            // TODO: what happens if we overflow?
+            // leave 1 column gap
+            (this.idxPanel.buffer as any).move(this.idxPanel.options.width - idxStr.length - 1, 0);
+
+            this.idxPanel.buffer.insert(idxStr);
             for(let i = 0; i < linesPrinted; i++) {
                 this.idxPanel.buffer.newLine();
             }
@@ -301,20 +315,20 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
             printOptions.logLevelColors[record.log.level]:
             printOptions.logLevelColors.info;
 
-        if(record.log.timestamp) {
+        if(record.log.timestamp !== undefined) {
             printOptions.dst.insert('[', {color: messageColor, dim: true});
-            LogDisplayPanel.printHighlightedText(record.log.timestamp, printOptions.dst, [], {color: messageColor, dim: true}, {color: 'blue'});
+            LogDisplayPanel.printHighlightedText(record.log.timestamp, printOptions.dst, LogDisplayPanel.getValueHighlightIndexes(record.idx, 'timestamp', printOptions.matches), {color: messageColor, dim: true}, {color: 'blue'});
             printOptions.dst.insert(']', {color: messageColor, dim: true});
         }
 
-        if(record.log.level) {
+        if(record.log.level !== undefined) {
             printOptions.dst.insert('[', {color: messageColor, dim: true});
-            LogDisplayPanel.printHighlightedText(record.log.level, printOptions.dst, [], {color: messageColor, dim: true}, {color: 'blue'});
+            LogDisplayPanel.printHighlightedText(record.log.level, printOptions.dst, LogDisplayPanel.getValueHighlightIndexes(record.idx, 'level', printOptions.matches), {color: messageColor, dim: true}, {color: 'blue'});
             printOptions.dst.insert(']', {color: messageColor, dim: true});
         }
 
-        if(record.log.message) {
-            LogDisplayPanel.printHighlightedText(record.log.message, printOptions.dst, [], {color: messageColor}, {color: 'blue'});
+        if(record.log.message !== undefined) {
+            LogDisplayPanel.printHighlightedText(record.log.message.toString(), printOptions.dst, LogDisplayPanel.getValueHighlightIndexes(record.idx, 'message', printOptions.matches), {color: messageColor}, {color: 'blue'});
         }
 
         let linesPrinted = 1;
@@ -327,14 +341,30 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
             delete expandedLog.pid;
             delete expandedLog.timestamp;
 
-            linesPrinted -= 1;// TODO: remove this line
-            linesPrinted += LogDisplayPanel.printJson(expandedLog, printOptions);
+            printOptions.dst.newLine();
+            linesPrinted += 1;
+            linesPrinted += LogDisplayPanel.printJson(record, expandedLog, printOptions);
         }
 
         return linesPrinted;
     }
 
-    public static printJson(obj: any, printOptions: LogDisplayPanel.PrintOptions, propertyPath?: Array<string | number>): number {
+    public static getValueHighlightIndexes(logIdx: LogIdx, property: PropertyId, matches?: ResultSet.MatchMap): number[] {
+        const logMatch = matches && matches.get(logIdx);
+        if(!logMatch) {
+            return [];
+        }
+
+        const valueMatch = logMatch.value.find((match) => match.value && match.value.property === property);
+
+        if(!valueMatch) {
+            return [];
+        }
+
+        return valueMatch.value!.fuzzyResult.indexes;
+    }
+
+    public static printJson(record: LogRecord, obj: any, printOptions: LogDisplayPanel.PrintOptions, propertyPath?: Array<string | number>): number {
         if(!propertyPath) {
             propertyPath = [];
         }
@@ -365,8 +395,8 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
             if(typeof obj === 'string') {
                 printOptions.dst.insert('"', attr);
             }
-            // TODO: get get indexes that should be highlighted
-            LogDisplayPanel.printHighlightedText(obj.toString(), printOptions.dst, [], attr, highlightValueAttr);
+
+            LogDisplayPanel.printHighlightedText(obj.toString(), printOptions.dst, LogDisplayPanel.getValueHighlightIndexes(record.idx, propertyPath.join('.'), printOptions.matches), attr, highlightValueAttr);
 
             if(typeof obj === 'string') {
                 printOptions.dst.insert('"', attr);
@@ -381,7 +411,7 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
 
             obj.forEach((value, index) => {
                 printOptions.dst.insert(printOptions.indentStr.repeat(propertyPath!.length + 1), attr);
-                linesPrinted += LogDisplayPanel.printJson(value, printOptions, propertyPath!.concat([index.toString()]));
+                linesPrinted += LogDisplayPanel.printJson(record, value, printOptions, propertyPath!.concat([index.toString()]));
 
                 if(index < obj.length - 1) {
                     printOptions.dst.insert(',', attr);
@@ -417,11 +447,20 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
 
                 // print property name
                 printOptions.dst.insert('"', attr);
-                LogDisplayPanel.printHighlightedText(property, printOptions.dst, [], attr, highlightPropertyAttr);
+
+                let highlightIndexes: number[] = [];
+                const logMatch = printOptions.matches && printOptions.matches.get(record.idx);
+                if(logMatch) {
+                    const propertyMatch = logMatch.property.find((match) => match.property && match.property.name === propertyId);
+                    if(propertyMatch) {
+                        highlightIndexes = propertyMatch.property!.fuzzyResult.indexes;
+                    }
+                }
+                LogDisplayPanel.printHighlightedText(property, printOptions.dst, highlightIndexes, attr, highlightPropertyAttr);
                 printOptions.dst.insert('"', attr);
 
                 //print value
-                linesPrinted += LogDisplayPanel.printJson(value, printOptions, propertyPath!.concat([property]));
+                linesPrinted += LogDisplayPanel.printJson(record, value, printOptions, propertyPath!.concat([property]));
                 if(index < keys.length - 1) {
                     printOptions.dst.insert(',', attr);
                 }
@@ -431,7 +470,7 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
 
 
             // indent
-            printOptions.dst.insert(printOptions.indentStr.repeat(propertyPath.length + 1), attr);
+            printOptions.dst.insert(printOptions.indentStr.repeat(propertyPath.length), attr);
             printOptions.dst.insert('}', attr);
         }
 
