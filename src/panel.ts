@@ -3,16 +3,6 @@ import {Attributes, Terminal, Buffer, ScreenBuffer, TextBuffer} from 'terminal-k
 import {LogRecord} from './logdb';
 import {ResultSet} from './logdb';
 
-export interface Panel<T extends Buffer> {
-    options: Panel.Options;
-
-    buffer: T;
-    calculatedHeight?: number;
-    calculatedWidth?: number;
-
-    children?: Panel<Buffer>[];
-}
-
 export namespace Panel {
     export interface Options {
         /** name used for identification in error messages */
@@ -26,105 +16,105 @@ export namespace Panel {
         };
         /** if true, children will be rendered left-to-right instead of top-to-bottom */
         flexCol?: boolean;
+        drawCursor?: boolean;
+    }
+}
+
+export abstract class Panel<T extends Buffer> {
+    public options: Panel.Options;
+    public buffer: T;
+
+    /** calculated width or height of 0 means the dimension hasn't been calculated yet */
+    public calculatedHeight: number;
+    public calculatedWidth: number;
+
+    public parent?: Panel<Buffer>;
+    public children: Panel<Buffer>[];
+
+    constructor(options: Panel.Options, buffer: T) {
+        this.options = options;
+        this.buffer = buffer;
+
+        this.calculatedWidth = 0;
+        this.calculatedHeight = 0;
+        this.children = [];
     }
 
-    export function createScreenPanel(dst: Buffer | Terminal, options: Options): Panel<ScreenBuffer> {
-        return {
-            options,
-            buffer: new ScreenBuffer({
-                dst,
-                width: options.width,
-                height: options.height,
-            }),
-        };
-    }
-
-    export function createTextPanel(dst: Buffer | Terminal, options: Options): Panel<TextBuffer> {
-        return {
-            options,
-            buffer: new TextBuffer({
-                dst: new ScreenBuffer({
-                    dst,
-                    width: options.width,
-                    height: options.height,
-                }),
-                width: options.width,
-                height: options.height,
-            }),
-        };
-    }
-
-    export function addChild(parent: Panel<Buffer>, child: Panel<Buffer>): void {
-        if(!parent.children) {
-            parent.children = [];
-        }
-        parent.children.push(child);
-        getScreenBuffer(child.buffer).dst = getScreenBuffer(parent.buffer);
+    public addChild(child: Panel<Buffer>): void {
+        this.children.push(child);
+        child.parent = this;
+        child.getScreenBuffer().dst = this.getScreenBuffer();
     };
 
+    /** returns the screen buffer if it is one, or the dst buffer of a TextBuffer */
+    public abstract getScreenBuffer(): ScreenBuffer;
+
+    /** draw the panel itself, but don't propegate the changes up the parent chain
+     * the changes may not be visible until the dst chain has been drawn */
+    public drawSelf(): void {
+        this.buffer.draw();
+        if(this.options.drawCursor) {
+            this.buffer.drawCursor();
+        }
+    }
+
     /** draw the buffer and all its parents */
-    export function draw(panel: Panel<Buffer>) {
-        let currentBuffer = panel.buffer;
+    public draw() {
+        this.drawSelf();
+        let parent = this.parent;
+        while(parent) {
+            parent.drawSelf();
+            parent = parent.parent;
+        }
+        /*
+        let currentBuffer = this.buffer;
         while(currentBuffer && currentBuffer instanceof ScreenBuffer || currentBuffer instanceof TextBuffer) {
             currentBuffer.draw();
             currentBuffer.drawCursor();
             currentBuffer = currentBuffer.dst as ScreenBuffer;
         }
+        */
     }
 
     /** draw all children in a post-DFS order */
-    export function redrawChildren(panel: Panel<Buffer>): void {
-        if(panel.children) {
-            panel.children.forEach(redrawChildren);
-        }
-
-        panel.buffer.draw();
-        panel.buffer.drawCursor();
-
-        if(panel.buffer instanceof TextBuffer) {
-            panel.buffer.dst.draw();
-            panel.buffer.dst.drawCursor();
-        }
-
-    }
-
-    /** returns the screen buffer if it is one, or the dst buffer of a TextBuffer */
-    export function getScreenBuffer(buffer: Buffer): ScreenBuffer {
-        return buffer instanceof ScreenBuffer? buffer: buffer.dst;
+    public redrawChildren(): void {
+        this.children.forEach((child) => child.redrawChildren());
+        this.drawSelf();
     }
 
     /** recalculate the size of a panel and its children */
-    export function resize(panel: Panel<Buffer>): void {
-        if(!panel.options.flex || !panel.options.flex.width) {
-            panel.calculatedWidth = panel.options.width;
+    public resize(): void {
+        if(!this.options.flex || !this.options.flex.width) {
+            this.calculatedWidth = this.options.width;
         }
 
-        if(!panel.options.flex || !panel.options.flex.height) {
-            panel.calculatedHeight = panel.options.height;
+        if(!this.options.flex || !this.options.flex.height) {
+            this.calculatedHeight = this.options.height;
         }
 
-        if(panel.calculatedHeight == undefined || panel.calculatedWidth == undefined) {
-            throw new Error(`Panel.resize: panel '${panel.options.name}' has flex '${panel.options.flex}', but does not have its own width/height calculated. Ensure Panel.resize() has been drawn on the parent of '${panel.options.name}', or disable flex on this panel`);
+        if(this.calculatedHeight === 0 || this.calculatedWidth === 0) {
+            throw new Error(`Panel.resize: panel '${this.options.name}' has flex '${this.options.flex}', but does not have its own width/height calculated. Ensure resize() has been drawn on the parent of '${this.options.name}', or disable flex on this panel`);
         }
 
-        getScreenBuffer(panel.buffer).resize({
+        this.getScreenBuffer().resize({
             x: 0,
             y: 0,
-            width: panel.calculatedWidth!,
-            height: panel.calculatedHeight!,
+            width: this.calculatedWidth!,
+            height: this.calculatedHeight!,
         });
 
-        if(panel.buffer instanceof TextBuffer) {
-            (panel.buffer as any).width = panel.calculatedWidth;
-            (panel.buffer as any).height = panel.calculatedHeight;
+        if(this.buffer instanceof TextBuffer) {
+            // TODO: fix terminal kit type definitions
+            (this.buffer as any).width = this.calculatedWidth;
+            (this.buffer as any).height = this.calculatedHeight;
         }
 
-        if(panel.children) {
+        if(this.children.length > 0) {
             const flexChildren: Panel<Buffer>[] = [];
             const fixedChildren: Panel<Buffer>[] = [];
-            panel.children.forEach((child) => {
-                if((panel.options.flexCol && child.options.flex && child.options.flex.width)
-                    || !panel.options.flexCol && child.options.flex && child.options.flex.height) {
+            this.children.forEach((child) => {
+                if((this.options.flexCol && child.options.flex && child.options.flex.width)
+                    || !this.options.flexCol && child.options.flex && child.options.flex.height) {
                     flexChildren.push(child);
                 }
                 else {
@@ -133,30 +123,30 @@ export namespace Panel {
             });
 
             const fixedSize = fixedChildren.reduce(
-                (sum, child) => sum + (panel.options.flexCol? child.options.width: child.options.height),
+                (sum, child) => sum + (this.options.flexCol? child.options.width: child.options.height),
                 0
             );
 
             const flexSize = 
-                (panel.options.flexCol? panel.calculatedWidth || 0 : panel.calculatedHeight || 0)
+                (this.options.flexCol? this.calculatedWidth || 0 : this.calculatedHeight || 0)
                 - fixedSize;
             const flexGrowSum = flexChildren.reduce(
-                (sum, child) => sum + (panel.options.flexCol? child.options.width: child.options.height),
+                (sum, child) => sum + (this.options.flexCol? child.options.width: child.options.height),
                 0
             );
 
             // resize the children
             let position = 0;
 
-            panel.children.forEach((child) => {
-                const screenBuffer = getScreenBuffer(child.buffer);
-                if(panel.options.flexCol) {
+            this.children.forEach((child) => {
+                const screenBuffer = child.getScreenBuffer();
+                if(this.options.flexCol) {
                     child.calculatedWidth = child.options.flex && child.options.flex.width?
                         Math.round(flexSize * (child.options.width / flexGrowSum)):
                         child.options.width;
 
                     child.calculatedHeight = child.options.flex && child.options.flex.height?
-                        panel.calculatedHeight:
+                        this.calculatedHeight:
                         child.options.height;
 
                     screenBuffer.x = position;
@@ -168,7 +158,7 @@ export namespace Panel {
                         Math.round(flexSize * (child.options.height / flexGrowSum)):
                         child.options.height;
                     child.calculatedWidth = child.options.flex && child.options.flex.width?
-                        panel.calculatedWidth:
+                        this.calculatedWidth:
                         child.options.width;
 
                     screenBuffer.x = 0;
@@ -176,223 +166,77 @@ export namespace Panel {
                     position += child.calculatedHeight;
                 }
 
-                resize(child);
+                child.resize();
             });
         }
     }
+}
 
-    /** a LogDisplay panel displays a list of logs */
-    export interface LogDisplay extends Panel<ScreenBuffer> {
-        /** displays the logIdx for the log (i.e. line number) */
-        idxPanel: Panel<TextBuffer>;
-        /** displays a list of logs */
-        logPanel: Panel<TextBuffer>;
-
-        logs: LogRecord[];
-        matches?: ResultSet.MatchMap;
-        expanededView: boolean;
-        logLevelColors: {[level: string]: string};
-
-        children: Panel<TextBuffer>[];
+export class ScreenPanel extends Panel<ScreenBuffer> {
+    constructor(dst: Buffer | Terminal, options: Panel.Options) {
+        super(options, new ScreenBuffer({
+            dst,
+            width: options.width,
+            height: options.height,
+        }));
     }
 
-    export namespace LogDisplay {
-        export interface Options {
-            idxWidth: number;
-            logLevelColors: {[level: string]: string};
-        }
+    public getScreenBuffer(): ScreenBuffer {
+        return this.buffer;
+    }
+}
 
-        export interface PrintOptions {
-            dst: TextBuffer;
-            matches?: ResultSet.MatchMap;
-            logLevelColors: {[level: string]: string};
-            expandedView: boolean;
-            /** this text is copied once for each level of indent in the exapnded view */
-            indentStr: string;
-        }
+export class TextPanel extends Panel<TextBuffer> {
+    public screenBuffer: ScreenBuffer;
+    constructor(dst: Buffer | Terminal, options: Panel.Options) {
+        const screenBuffer = new ScreenBuffer({
+            dst,
+            width: options.width,
+            height: options.height,
+        });
 
-        /** 
-         * prints all the logs in the logs object
-         * Even though screenbuffer has its own implementation of scrolling, we don't use it, because screenbuffer also stores attr data for every line, which isn't reasonable for a large number of logs
-         */
-        export function print(logDisplay: LogDisplay, scrollOffset: number): void {
-            // TODO: implement scrolling, reset display properly
-            const printOptions: PrintOptions = {
-                dst: logDisplay.logPanel.buffer,
-                matches: logDisplay.matches,
-                logLevelColors: logDisplay.logLevelColors,
-                expandedView: logDisplay.expanededView,
-                indentStr: ' '.repeat(4),
-            };
-            logDisplay.logs.forEach((record) => {
-                const linesPrinted = printLog(record, printOptions);
-                logDisplay.logPanel.buffer.newLine();
+        super(options, new TextBuffer({
+            dst: screenBuffer,
+            width: options.width,
+            height: options.height,
+        }));
 
-                logDisplay.idxPanel.buffer.insert(record.idx.toString());
-                for(let i = 0; i < linesPrinted; i++) {
-                    logDisplay.idxPanel.buffer.newLine();
-                }
-            });
-        }
+        this.screenBuffer = screenBuffer;
+    }
 
-        export function printLog(record: LogRecord, printOptions: PrintOptions): number {
-            const messageColor = record.log && record.log.level?
-                printOptions.logLevelColors[record.log.level]:
-                printOptions.logLevelColors.info;
+    public drawSelf(): void {
+        super.drawSelf();
 
-            if(record.log.timestamp) {
-                printOptions.dst.insert('[', {color: messageColor, dim: true});
-                printHighlightedText(record.log.timestamp, printOptions.dst, [], {color: messageColor, dim: true}, {color: 'blue'});
-                printOptions.dst.insert(']', {color: messageColor, dim: true});
-            }
-
-            if(record.log.level) {
-                printOptions.dst.insert('[', {color: messageColor, dim: true});
-                printHighlightedText(record.log.level, printOptions.dst, [], {color: messageColor, dim: true}, {color: 'blue'});
-                printOptions.dst.insert(']', {color: messageColor, dim: true});
-            }
-
-            if(record.log.message) {
-                printHighlightedText(record.log.message, printOptions.dst, [], {color: messageColor}, {color: 'blue'});
-            }
-
-            let linesPrinted = 1;
-            if(printOptions.expandedView) {
-                // copy top-level properties of the log and delete properties we don't want displayed in the expanded view
-                // TODO: make this a user configurable whitelist/blacklist
-                const expandedLog = Object.assign({}, record.log);
-                delete expandedLog.level;
-                delete expandedLog.message;
-                delete expandedLog.pid;
-                delete expandedLog.timestamp;
-
-                linesPrinted -= 1;// TODO: remove this line
-                linesPrinted += printJson(expandedLog, printOptions);
-            }
-
-            return linesPrinted;
-        }
-
-        export function printJson(obj: any, printOptions: PrintOptions, propertyPath?: Array<string | number>): number {
-            if(!propertyPath) {
-                propertyPath = [];
-            }
-
-            const attr = {dim: true};
-            const highlightPropertyAttr = {color: 'red'};
-            const highlightValueAttr = {color: 'blue'};
-
-            let linesPrinted = 0;
-            let text: string;
-
-            // prepare value
-            if(typeof obj === 'undefined') {
-                text = 'undefined';
-            }
-            if(obj === null) {
-                text = 'null';
-            }
-
-            // this doesn't work because of the way the highlight indexes are set up
-            // instead, we have to insert the quotations around the highlighted text
-            // if(typeof obj === 'string') {
-                // obj = '"' + obj + '"';
-            // }
-
-            // print
-            if(typeof obj === 'string' || typeof obj === 'number') {
-                if(typeof obj === 'string') {
-                    printOptions.dst.insert('"', attr);
-                }
-                // TODO: get get indexes that should be highlighted
-                printHighlightedText(obj.toString(), printOptions.dst, [], attr, highlightValueAttr);
-
-                if(typeof obj === 'string') {
-                    printOptions.dst.insert('"', attr);
-                }
-            }
-            else if(Array.isArray(obj)) {
-                printOptions.dst.insert('[', attr);
-                if(obj.length > 0) {
-                    printOptions.dst.newLine();
-                    linesPrinted++;
-                }
-
-                obj.forEach((value, index) => {
-                    printOptions.dst.insert(printOptions.indentStr.repeat(propertyPath!.length + 1), attr);
-                    linesPrinted += printJson(value, printOptions, propertyPath!.concat([index.toString()]));
-
-                    if(index < obj.length - 1) {
-                        printOptions.dst.insert(',', attr);
-                        printOptions.dst.newLine();
-                        linesPrinted++;
-                    }
-                    else {
-                        printOptions.dst.newLine();
-                        linesPrinted++;
-                        // set up indentation for closing brace
-                        printOptions.dst.insert(printOptions.indentStr.repeat(propertyPath!.length), attr);
-                    }
-                });
-
-                printOptions.dst.insert(']', attr);
-            }
-            else if(typeof obj === 'object') {
-                printOptions.dst.insert('{', attr);
-                printOptions.dst.newLine();
-                linesPrinted++;
-
-                Object.keys(obj).forEach((property, index, keys) => {
-                    const value = obj[property];
-                    let propertyPrefix = propertyPath!.join('.');
-                    if(propertyPath!.length > 0) {
-                        propertyPrefix += '.';
-                    }
-
-                    const propertyId = propertyPrefix + property;
-
-                    //indent
-                    printOptions.dst.insert(printOptions.indentStr.repeat(propertyPath!.length + 1), attr);
-
-                    // print property name
-                    printOptions.dst.insert('"', attr);
-                    printHighlightedText(property, printOptions.dst, [], attr, highlightPropertyAttr);
-                    printOptions.dst.insert('"', attr);
-
-                    //print value
-                    linesPrinted += printJson(value, printOptions, propertyPath!.concat([property]));
-                    if(index < keys.length - 1) {
-                        printOptions.dst.insert(',', attr);
-                    }
-                    printOptions.dst.newLine();
-                    linesPrinted++;
-                });
-
-
-                // indent
-                printOptions.dst.insert(printOptions.indentStr.repeat(propertyPath.length + 1), attr);
-                printOptions.dst.insert('}', attr);
-            }
-
-            return linesPrinted;
-        }
-
-        export function printHighlightedText(str: string, dst: TextBuffer, highlightIndexes: number[], attr: Attributes, highlightAttr: Attributes): void {
-            for(let i = 0; i < str.length; i++) {
-                if(highlightIndexes.includes(i)) {
-                    dst.insert(str[i], highlightAttr);
-                }
-                else {
-                    dst.insert(str[i], attr);
-                }
-            }
+        this.screenBuffer.draw();
+        if(this.options.drawCursor) {
+            this.screenBuffer.drawCursor();
         }
     }
 
-    export function createLogDisplayPanel(dst: Buffer | Terminal, options: Options, logDisplayOptions?: Partial<LogDisplay.Options>): LogDisplay {
-        const panel = createScreenPanel(dst, options);
-        const idxPanel = createTextPanel(panel.buffer, {
-            name: `${panel.options.name? panel.options.name: ''}.idxPanel`,
+    public getScreenBuffer(): ScreenBuffer {
+        return this.screenBuffer;
+    }
+}
+
+export class LogDisplayPanel extends Panel<ScreenBuffer> {
+    /** displays the logIdx for the log (i.e. line number) */
+    public idxPanel: Panel<TextBuffer>;
+    /** displays a list of logs */
+    public logPanel: Panel<TextBuffer>;
+
+    public logs: LogRecord[];
+    public matches?: ResultSet.MatchMap;
+    public expandedView: boolean;
+    public logLevelColors: {[level: string]: string};
+
+    constructor(dst: Buffer | Terminal, options: Panel.Options, logDisplayOptions?: Partial<LogDisplayPanel.Options>) {
+        super(options, new ScreenBuffer({
+            dst,
+            width: options.width,
+            height: options.height,
+        }));
+        this.idxPanel = new TextPanel(this.buffer, {
+            name: `${this.options.name? this.options.name: ''}.idxPanel`,
             width: logDisplayOptions && logDisplayOptions.idxWidth || 4,
             height: 1,
             flex: {
@@ -400,8 +244,8 @@ export namespace Panel {
             },
         });
 
-        const logPanel = createTextPanel(panel.buffer, {
-            name: `${panel.options.name? panel.options.name: ''}.logPanel`,
+        this.logPanel = new TextPanel(this.buffer, {
+            name: `${this.options.name? this.options.name: ''}.logPanel`,
             width: 1,
             height: 1,
             flex: {
@@ -409,28 +253,215 @@ export namespace Panel {
                 height: true,
             }
         });
+
         // TODO: width/height calculation is wrong if FLEX enabled?? */
+        this.options.flexCol = true;
+        this.logs = [];
+        this.expandedView = false;
+        this.logLevelColors = logDisplayOptions && logDisplayOptions.logLevelColors || {
+            info: 'bold',
+            warn: 'yellow',
+            error: 'red',
+        };
 
-        const logDisplayPanel = Object.assign(panel, {
-            options: Object.assign(options, {
-                flexCol: true,
-            }),
-            idxPanel,
-            logPanel,
-            logs: [],
-            expanededView: false,
-            logLevelColors: logDisplayOptions && logDisplayOptions.logLevelColors || {
-                info: 'bold',
-                warn: 'yellow',
-                error: 'red',
-            },
-            children: [],
-        });
-
-        addChild(logDisplayPanel, idxPanel);
-        addChild(logDisplayPanel, logPanel);
-
-        return logDisplayPanel;
+        this.addChild(this.idxPanel);
+        this.addChild(this.logPanel);
     }
 
+    public getScreenBuffer(): ScreenBuffer {
+        return this.buffer;
+    }
+
+    /** 
+     * prints all the logs in the logs object
+     * Even though screenbuffer has its own implementation of scrolling, we don't use it, because screenbuffer also stores attr data for every line, which isn't reasonable for a large number of logs
+     */
+    public print(scrollOffset: number): void {
+        // TODO: implement scrolling, reset display properly
+        const printOptions: LogDisplayPanel.PrintOptions = {
+            dst: this.logPanel.buffer,
+            matches: this.matches,
+            logLevelColors: this.logLevelColors,
+            expandedView: this.expandedView,
+            indentStr: ' '.repeat(4),
+        };
+        this.logs.forEach((record) => {
+            const linesPrinted = LogDisplayPanel.printLog(record, printOptions);
+            this.logPanel.buffer.newLine();
+
+            this.idxPanel.buffer.insert(record.idx.toString());
+            for(let i = 0; i < linesPrinted; i++) {
+                this.idxPanel.buffer.newLine();
+            }
+        });
+    }
+
+    public static printLog(record: LogRecord, printOptions: LogDisplayPanel.PrintOptions): number {
+        const messageColor = record.log && record.log.level?
+            printOptions.logLevelColors[record.log.level]:
+            printOptions.logLevelColors.info;
+
+        if(record.log.timestamp) {
+            printOptions.dst.insert('[', {color: messageColor, dim: true});
+            LogDisplayPanel.printHighlightedText(record.log.timestamp, printOptions.dst, [], {color: messageColor, dim: true}, {color: 'blue'});
+            printOptions.dst.insert(']', {color: messageColor, dim: true});
+        }
+
+        if(record.log.level) {
+            printOptions.dst.insert('[', {color: messageColor, dim: true});
+            LogDisplayPanel.printHighlightedText(record.log.level, printOptions.dst, [], {color: messageColor, dim: true}, {color: 'blue'});
+            printOptions.dst.insert(']', {color: messageColor, dim: true});
+        }
+
+        if(record.log.message) {
+            LogDisplayPanel.printHighlightedText(record.log.message, printOptions.dst, [], {color: messageColor}, {color: 'blue'});
+        }
+
+        let linesPrinted = 1;
+        if(printOptions.expandedView) {
+            // copy top-level properties of the log and delete properties we don't want displayed in the expanded view
+            // TODO: make this a user configurable whitelist/blacklist
+            const expandedLog = Object.assign({}, record.log);
+            delete expandedLog.level;
+            delete expandedLog.message;
+            delete expandedLog.pid;
+            delete expandedLog.timestamp;
+
+            linesPrinted -= 1;// TODO: remove this line
+            linesPrinted += LogDisplayPanel.printJson(expandedLog, printOptions);
+        }
+
+        return linesPrinted;
+    }
+
+    public static printJson(obj: any, printOptions: LogDisplayPanel.PrintOptions, propertyPath?: Array<string | number>): number {
+        if(!propertyPath) {
+            propertyPath = [];
+        }
+
+        const attr = {dim: true};
+        const highlightPropertyAttr = {color: 'red'};
+        const highlightValueAttr = {color: 'blue'};
+
+        let linesPrinted = 0;
+        let text: string;
+
+        // prepare value
+        if(typeof obj === 'undefined') {
+            text = 'undefined';
+        }
+        if(obj === null) {
+            text = 'null';
+        }
+
+        // this doesn't work because of the way the highlight indexes are set up
+        // instead, we have to insert the quotations around the highlighted text
+        // if(typeof obj === 'string') {
+        // obj = '"' + obj + '"';
+        // }
+
+        // print
+        if(typeof obj === 'string' || typeof obj === 'number') {
+            if(typeof obj === 'string') {
+                printOptions.dst.insert('"', attr);
+            }
+            // TODO: get get indexes that should be highlighted
+            LogDisplayPanel.printHighlightedText(obj.toString(), printOptions.dst, [], attr, highlightValueAttr);
+
+            if(typeof obj === 'string') {
+                printOptions.dst.insert('"', attr);
+            }
+        }
+        else if(Array.isArray(obj)) {
+            printOptions.dst.insert('[', attr);
+            if(obj.length > 0) {
+                printOptions.dst.newLine();
+                linesPrinted++;
+            }
+
+            obj.forEach((value, index) => {
+                printOptions.dst.insert(printOptions.indentStr.repeat(propertyPath!.length + 1), attr);
+                linesPrinted += LogDisplayPanel.printJson(value, printOptions, propertyPath!.concat([index.toString()]));
+
+                if(index < obj.length - 1) {
+                    printOptions.dst.insert(',', attr);
+                    printOptions.dst.newLine();
+                    linesPrinted++;
+                }
+                else {
+                    printOptions.dst.newLine();
+                    linesPrinted++;
+                    // set up indentation for closing brace
+                    printOptions.dst.insert(printOptions.indentStr.repeat(propertyPath!.length), attr);
+                }
+            });
+
+            printOptions.dst.insert(']', attr);
+        }
+        else if(typeof obj === 'object') {
+            printOptions.dst.insert('{', attr);
+            printOptions.dst.newLine();
+            linesPrinted++;
+
+            Object.keys(obj).forEach((property, index, keys) => {
+                const value = obj[property];
+                let propertyPrefix = propertyPath!.join('.');
+                if(propertyPath!.length > 0) {
+                    propertyPrefix += '.';
+                }
+
+                const propertyId = propertyPrefix + property;
+
+                //indent
+                printOptions.dst.insert(printOptions.indentStr.repeat(propertyPath!.length + 1), attr);
+
+                // print property name
+                printOptions.dst.insert('"', attr);
+                LogDisplayPanel.printHighlightedText(property, printOptions.dst, [], attr, highlightPropertyAttr);
+                printOptions.dst.insert('"', attr);
+
+                //print value
+                linesPrinted += LogDisplayPanel.printJson(value, printOptions, propertyPath!.concat([property]));
+                if(index < keys.length - 1) {
+                    printOptions.dst.insert(',', attr);
+                }
+                printOptions.dst.newLine();
+                linesPrinted++;
+            });
+
+
+            // indent
+            printOptions.dst.insert(printOptions.indentStr.repeat(propertyPath.length + 1), attr);
+            printOptions.dst.insert('}', attr);
+        }
+
+        return linesPrinted;
+    }
+
+    public static printHighlightedText(str: string, dst: TextBuffer, highlightIndexes: number[], attr: Attributes, highlightAttr: Attributes): void {
+        for(let i = 0; i < str.length; i++) {
+            if(highlightIndexes.includes(i)) {
+                dst.insert(str[i], highlightAttr);
+            }
+            else {
+                dst.insert(str[i], attr);
+            }
+        }
+    }
+}
+
+export namespace LogDisplayPanel {
+    export interface Options {
+        idxWidth: number;
+        logLevelColors: {[level: string]: string};
+    }
+
+    export interface PrintOptions {
+        dst: TextBuffer;
+        matches?: ResultSet.MatchMap;
+        logLevelColors: {[level: string]: string};
+        expandedView: boolean;
+        /** this text is copied once for each level of indent in the exapnded view */
+        indentStr: string;
+    }
 }

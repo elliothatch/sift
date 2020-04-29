@@ -73,23 +73,23 @@ display.terminal.on('key', (name: any, matches: any, data: any) => {
 		else if(name === 'BACKSPACE') {
 			display.queryPanel.buffer.backDelete(1);
 			// filterLogs(queryTextBuffer.getText());
-			Panel.draw(display.queryPanel);
+			display.queryPanel.draw();
 		}
 		else if(name === 'DELETE') {
 			display.queryPanel.buffer.delete(1);
 			// filterLogs(queryTextBuffer.getText());
-			Panel.draw(display.queryPanel);
+			display.queryPanel.draw();
 		}
 		else if(name === 'TAB') {
 		    // TODO: make this per-panel based on focus
-		    display.logDisplayPanel.expanededView = !display.logDisplayPanel.expanededView;
-            Panel.LogDisplay.print(logDisplayPanel, 0);
-		    Panel.redrawChildren(display.logDisplayPanel);
-		    Panel.draw(display.logDisplayPanel);
+		    display.logDisplayPanel.expandedView = !display.logDisplayPanel.expandedView;
+            display.logDisplayPanel.print(0);
+		    display.logDisplayPanel.redrawChildren();
+		    display.logDisplayPanel.draw();
         }
         else if(data.isCharacter) {
             display.queryPanel.buffer.insert(name);
-            Panel.draw(display.queryPanel);
+            display.queryPanel.draw();
             // TODO: create special class/functions LogPanel, that allow adding/removing/setting logs, scrolling, and display options like expanded
             // try {
             const expr = parser.parse(display.queryPanel.buffer.getText());
@@ -136,10 +136,10 @@ const logDisplayPanel = display.logDisplayPanel;
 // const logDisplayPanel: Panel.LogDisplay = display.logPanel.children![0] as Panel.LogDisplay;
 logDisplayPanel.logs = logdb.logs;
 
-Panel.LogDisplay.print(logDisplayPanel, 0);
+logDisplayPanel.print(0);
 
-Panel.redrawChildren(logDisplayPanel);
-Panel.draw(logDisplayPanel);
+logDisplayPanel.redrawChildren();
+logDisplayPanel.draw();
 
 
 exitLogs.push({message: display.queryResults.calculatedWidth});

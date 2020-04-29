@@ -1,30 +1,30 @@
 import {terminal, Terminal, Buffer, ScreenBuffer, TextBuffer} from 'terminal-kit';
 
-import { Panel } from './panel';
+import { ScreenPanel, TextPanel, LogDisplayPanel } from './panel';
 
 export class Display {
 
     public terminal: Terminal
 
-    public rootPanel: Panel<ScreenBuffer>;
-    public logPanel: Panel<ScreenBuffer>;
-    public logDisplayPanel: Panel.LogDisplay;
-    public statusBar: Panel<ScreenBuffer>;
-    public queryResults: Panel<ScreenBuffer>;
-    public processPanel: Panel<ScreenBuffer>;
+    public rootPanel: ScreenPanel;
+    public logPanel: ScreenPanel;
+    public logDisplayPanel: LogDisplayPanel;
+    public statusBar: ScreenPanel;
+    public queryResults: ScreenPanel;
+    public processPanel: ScreenPanel;
 
-    public queryPanel: Panel<TextBuffer>;
+    public queryPanel: TextPanel;
 
     constructor(term?: Terminal) {
         this.terminal = term || terminal;
 
-        this.rootPanel = Panel.createScreenPanel(this.terminal, {
+        this.rootPanel = new ScreenPanel(this.terminal, {
             name: 'root',
             width: this.terminal.width,
             height: this.terminal.height,
         });
 
-        this.logPanel = Panel.createScreenPanel(this.rootPanel.buffer, {
+        this.logPanel = new ScreenPanel(this.rootPanel.buffer, {
             name: 'log',
             width: 1,
             height: 1,
@@ -32,25 +32,25 @@ export class Display {
             flexCol: true
         });
 
-        Panel.addChild(this.rootPanel, this.logPanel);
+        this.rootPanel.addChild(this.logPanel);
 
-        this.logDisplayPanel = Panel.createLogDisplayPanel(this.logPanel.buffer, {
+        this.logDisplayPanel = new LogDisplayPanel(this.logPanel.buffer, {
             name: 'logDisplay',
             width: 1,
             height: 1,
             flex: {width: true, height: true},
         });
 
-        Panel.addChild(this.logPanel, this.logDisplayPanel);
+        this.logPanel.addChild(this.logDisplayPanel);
 
         /*
-        Panel.addChild(this.logPanel, Panel.createScreenPanel(this.logPanel.buffer, {
+        Panel.addChild(this.logPanel, new ScreenPanel(this.logPanel.buffer, {
             name: 'log1',
             width: 1,
             height: 1,
             flex: { width: true, height: true },
         }));
-        Panel.addChild(this.logPanel, Panel.createScreenPanel(this.logPanel.buffer, {
+        Panel.addChild(this.logPanel, new ScreenPanel(this.logPanel.buffer, {
             name: 'log2',
             width: 1,
             height: 1,
@@ -58,44 +58,44 @@ export class Display {
         }));
         */
 
-        this.statusBar = Panel.createScreenPanel(this.rootPanel.buffer, {
+        this.statusBar = new ScreenPanel(this.rootPanel.buffer, {
             name: 'statusbar',
             width: 1,
             height: 1,
             flex: { width: true },
             flexCol: true,
         });
-        Panel.addChild(this.rootPanel, this.statusBar);
+        this.rootPanel.addChild(this.statusBar);
 
-        this.queryResults = Panel.createScreenPanel(this.rootPanel.buffer, {
+        this.queryResults = new ScreenPanel(this.rootPanel.buffer, {
             name: 'queryresults',
             width: 5,
             height: 1,
         });
-        Panel.addChild(this.statusBar, this.queryResults);
+        this.statusBar.addChild(this.queryResults);
 
-        this.processPanel = Panel.createScreenPanel(this.rootPanel.buffer, {
+        this.processPanel = new ScreenPanel(this.rootPanel.buffer, {
             name: 'processes',
             width: 1,
             height: 1,
             flex: { width: true }
         });
-        Panel.addChild(this.statusBar, this.processPanel);
+        this.statusBar.addChild(this.processPanel);
 
-        this.queryPanel = Panel.createTextPanel(this.rootPanel.buffer, {
+        this.queryPanel = new TextPanel(this.rootPanel.buffer, {
             name: 'query',
             width: 1,
             height: 1,
             flex: { width: true }
         });
-        Panel.addChild(this.rootPanel, this.queryPanel);
+        this.rootPanel.addChild(this.queryPanel);
 
-        Panel.resize(this.rootPanel);
+        this.rootPanel.resize();
 
         this.terminal.on('resize', (width: number, height: number) => {
             this.rootPanel.options.width = width;
             this.rootPanel.options.height = height;
-            Panel.resize(this.rootPanel);
+            this.rootPanel.resize();
             this.draw();
         });
     }
@@ -115,7 +115,7 @@ export class Display {
         // this.processPanel.buffer.fill({char: '7', attr: {color: 'black', bgColor: 'yellow'}});
         // this.queryPanel.buffer.dst.fill({char: '8', attr: {color: 'black', bgColor: 'white'}});
 
-        Panel.redrawChildren(this.rootPanel);
+        this.rootPanel.redrawChildren();
     }
 }
 
