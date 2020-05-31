@@ -1,8 +1,8 @@
 import {Readable} from 'stream';
 import * as fuzzysort from 'fuzzysort';
 
-import { EMPTY, from, merge, Observable, of, forkJoin } from 'rxjs';
-import { map, mergeMap, filter, toArray } from 'rxjs/operators';
+import { EMPTY, from, merge, Observable, Subject, of, forkJoin, timer } from 'rxjs';
+import { map, mergeMap, filter, toArray, tap, delay } from 'rxjs/operators';
 
 import { Parse } from './query';
 
@@ -225,6 +225,12 @@ export namespace LogIndex {
 
 }
 
+export interface FilterMatch {
+    record: LogRecord;
+    matches: ResultSet.Match[];
+    resultSet: ResultSet;
+}
+
 export interface ResultSet {
     /** dictionary that stores fuzzysort match information about each log. used for text highlighting */
     matches: ResultSet.MatchMap;
@@ -236,6 +242,7 @@ export namespace ResultSet {
         property: Match[];
         value: Match[];
     }>;
+
     export interface Match {
         logRecord: LogRecord;
         property?: {
@@ -311,6 +318,8 @@ export class LogDb {
 
     public fuzzysortThreshold: number;
 
+    public logSubject: Subject<LogRecord>;
+
     constructor() {
         this.logs = [];
         this.logIndex = {
@@ -320,12 +329,20 @@ export class LogDb {
             values: [],
         };
         this.fuzzysortThreshold = -100;
+
+        this.logSubject = new Subject();
     }
 
     /** parses a raw string, then records it in the database and indexes it */
-    public ingest(line: string): LogRecord {
+    public ingest(line: string, level?: string): LogRecord {
+        if(this.logs.length > 100000) {
+            throw new Error('max logs');
+        }
 
         const log = parseLog(line);
+        if(level) {
+            (log as any).level = level;
+        }
         const record = {
             log, 
             idx: this.logs.length,
@@ -337,7 +354,272 @@ export class LogDb {
         LogIndex.addLogRecord(record, this.logIndex);
         // filterSingleLog(queryTextBuffer.getText(), logOffset, indexResults.properties, indexResults.values);
 
+        this.logSubject.next(record);
         return record;
+    }
+
+    // BUG: full match doesn't dowrk
+    // BUG: full match with child property doesn't actually check value side of match
+    public matchLog(query: Parse.Expression, record: LogRecord): ResultSet.Match[] {
+        switch(query.eType) {
+            case 'VALUE':
+                // filtering on just a VALUE expression searches the term as a property OR value
+                return this.matchLog({
+                        eType: 'OR',
+                    lhs: {
+                        eType: 'MATCH',
+                        mType: 'PROPERTY',
+                        property: query,
+                    },
+                    rhs: {
+                        eType: 'MATCH',
+                        mType: 'VALUE',
+                        value: query,
+                    }
+                }, record);
+            case 'EXCLUDE':
+                // filtering on just an EXCLUDE expression excludes matches in the property AND value fields
+                return this.matchLog({
+                    eType: 'AND',
+                    lhs: {
+                        eType: 'MATCH',
+                        mType: 'PROPERTY',
+                        property: query,
+                    },
+                    rhs: {
+                        eType: 'MATCH',
+                        mType: 'VALUE',
+                        value: query
+                    }
+                }, record);
+            case 'MATCH':
+                return this.evaluateMatch(query, record);
+            case 'AND': {
+                const lhsMatches = query.lhs?
+                    this.matchLog(query.lhs, record):
+                    [];
+
+                const rhsMatches = query.rhs?
+                    this.matchLog(query.rhs, record):
+                    [];
+
+                if(lhsMatches.length == 0 || rhsMatches.length == 0) {
+                    return [];
+                }
+
+                return lhsMatches.concat(rhsMatches);
+            }
+            case 'OR': {
+                const lhsMatches = query.lhs?
+                    this.matchLog(query.lhs, record):
+                    [];
+
+                const rhsMatches = query.rhs?
+                    this.matchLog(query.rhs, record):
+                    [];
+
+                return lhsMatches.concat(rhsMatches);
+            }
+            default:
+                throw new Error(`Unrecognized expression: ${query}`);
+        }
+    }
+
+    public evaluateMatch(matchQuery: Parse.Expression.MATCH, record: LogRecord): ResultSet.Match[] {
+        if((matchQuery.mType === 'FULL' || matchQuery.mType === 'PROPERTY')
+            && matchQuery.property.eType !== 'EXCLUDE') {
+            return this.matchFullOrProperty(matchQuery, record);
+        }
+        else if((matchQuery.mType === 'FULL' || matchQuery.mType === 'VALUE')
+            && matchQuery.value.eType !== 'EXCLUDE') {
+            return this.matchFullOrValue(matchQuery, record);
+        }
+        else if(matchQuery.mType === 'FULL' || matchQuery.mType === 'ALL') {
+            // both fields are excluded or match all
+            return [{logRecord: record}];
+        }
+        else if(matchQuery.mType === 'PROPERTY') {
+            return this.matchExcludeProperty(matchQuery, record);
+        }
+        else if(matchQuery.mType === 'VALUE') {
+            return this.matchExcludeValue(matchQuery, record);
+        }
+        else {
+            throw new Error(`filterMatch: unhandled match query: ${matchQuery}`);
+        }
+    }
+
+
+    public matchFullOrProperty(matchQuery: Parse.Expression.MATCH.FULL_MATCH | Parse.Expression.MATCH.PROPERTY_MATCH, record: LogRecord): ResultSet.Match[] {
+            // search by property index
+            const matches: ResultSet.Match[] = [];
+            for(let property of record.index.properties.values()) {
+                const propertyMatch = fuzzysort.single((matchQuery.property as Parse.Expression.VALUE).value, property);
+                if(!propertyMatch || propertyMatch.score < this.fuzzysortThreshold) continue;
+
+                let match: ResultSet.Match = {
+                    logRecord: record,
+                    property: {
+                        name: propertyMatch.target,
+                        fuzzyResult: propertyMatch,
+                    }
+                };
+
+                if(matchQuery.mType === 'FULL') {
+                    const value = getProperty(record.log, propertyMatch.target);
+                    const searchValue = matchQuery.value.eType === 'VALUE'?
+                        matchQuery.value.value:
+                        matchQuery.value.expr.value;
+
+                    let valueMatch = fuzzysort.single(searchValue, value.toString());
+                    if(!valueMatch || valueMatch.score < this.fuzzysortThreshold) {
+                        valueMatch = null;
+                    }
+
+                    if(matchQuery.value.eType === 'EXCLUDE') {
+                        if(valueMatch) {
+                            // no match
+                            continue;
+                        }
+                    }
+                    else if(valueMatch) {
+                        match.value = {
+                            property: propertyMatch.target,
+                            value,
+                            fuzzyResult: valueMatch,
+                        };
+                    }
+                    else {
+                        continue;
+                    }
+                }
+
+                matches.push(match);
+            }
+
+            return matches;
+    }
+
+    public matchFullOrValue(matchQuery: Parse.Expression.MATCH.FULL_MATCH | Parse.Expression.MATCH.VALUE_MATCH, record: LogRecord): ResultSet.Match[] {
+        // search by property index
+        const matches: ResultSet.Match[] = [];
+        for(let [value, properties] of record.index.values.entries()) {
+            const valueMatch = fuzzysort.single((matchQuery.value as Parse.Expression.VALUE).value, value);
+            if(!valueMatch || valueMatch.score < this.fuzzysortThreshold) continue;
+
+            for(let property of properties) {
+                let match: ResultSet.Match = {
+                    logRecord: record,
+                    value: {
+                        property,
+                        value: valueMatch.target,
+                        fuzzyResult: valueMatch,
+                    }
+                };
+
+                if(matchQuery.mType === 'FULL') {
+                    const searchProperty = matchQuery.value.eType === 'VALUE'?
+                        matchQuery.value.value:
+                        matchQuery.value.expr.value;
+
+                    let propertyMatch = fuzzysort.single(searchProperty, property);
+                    if(!propertyMatch || propertyMatch.score < this.fuzzysortThreshold) {
+                        propertyMatch = null;
+                    }
+
+                    if(matchQuery.value.eType === 'EXCLUDE') {
+                        if(propertyMatch) {
+                            // no match
+                            continue;
+                        }
+                    }
+                    else if(propertyMatch) {
+                        match.property = {
+                            name: property,
+                            fuzzyResult: propertyMatch,
+                        };
+                    }
+                }
+
+                matches.push(match);
+            }
+        }
+        return matches;
+    }
+
+    public matchExcludeProperty(matchQuery: Parse.Expression.MATCH.PROPERTY_MATCH, record: LogRecord): ResultSet.Match[] {
+        for(let property of record.index.properties.values()) {
+            const propertyMatch = fuzzysort.single((matchQuery.property as Parse.Expression.EXCLUDE).expr.value, property);
+            if(propertyMatch && propertyMatch.score >= this.fuzzysortThreshold) {
+                return [{
+                    logRecord: record,
+                }];
+            }
+        }
+
+        return [];
+    }
+
+    /** return an empty match if the log matches the value */
+    public matchExcludeValue(matchQuery: Parse.Expression.MATCH.VALUE_MATCH, record: LogRecord): ResultSet.Match[] {
+        for(let [value, properties] of record.index.properties.values()) {
+            const valueMatch = fuzzysort.single((matchQuery.value as Parse.Expression.EXCLUDE).expr.value, value);
+            if(valueMatch && valueMatch.score >= this.fuzzysortThreshold) {
+                return [{
+                    logRecord: record,
+                }];
+            }
+        }
+
+        return [];
+    }
+
+    public filterAll(query: Parse.Expression): Observable<FilterMatch> {
+        const filteredResultSet: ResultSet = {
+            matches: new Map(),
+            index: {
+                propertyIndex:  new Map(),
+                properties: [],
+                valueIndex: new Map(),
+                values: [],
+            }
+        };
+
+        const filterObservables: Array<Observable<FilterMatch>> = [];
+
+        // TODO: add sampling options
+        for(let i = this.logs.length - 1; i >= 0; i--) {
+            filterObservables.push(of(i).pipe(
+                map((idx) => {
+                    const record = this.logs[idx];
+                    const matches = this.matchLog(query, record);
+                    matches.forEach((match) => ResultSet.addMatch(match, filteredResultSet))
+                    return {
+                        record,
+                        matches,
+                        resultSet: filteredResultSet
+                    };
+                }),
+                filter((match) => match.matches.length > 0),
+            ));
+        }
+
+        return merge(...filterObservables);
+    }
+
+    public filterOne(query: Parse.Expression, record: LogRecord): Observable<ResultSet> {
+        const searchSet = {
+            matches: new Map(),
+            index: {
+                propertyIndex: new Map(),
+                properties: [],
+                valueIndex: new Map(),
+                values: [],
+            }
+        };
+
+        LogIndex.addLogRecord(record, searchSet.index);
+        return this.filter(query, searchSet);
     }
 
     // TODO: return an observable of Result instead of resultset, so we can stream each match in as its found. this requires knowing that there are no more AND clauses that a particular log might be filtered by. generally a different approach to how we handle query execution, and will require some reworking

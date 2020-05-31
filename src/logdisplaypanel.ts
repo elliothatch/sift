@@ -1,7 +1,7 @@
 import {Attributes, Terminal, Buffer, ScreenBuffer, TextBuffer} from 'terminal-kit';
 
 import { Panel, ScreenPanel, TextPanel } from './panel';
-import {LogRecord, LogIdx, PropertyId, ResultSet} from './logdb';
+import {LogRecord, LogIdx, PropertyId, ResultSet, FilterMatch } from './logdb';
 
 export class LogDisplayPanel extends Panel<ScreenBuffer> {
     /** displays a list of logs */
@@ -9,7 +9,7 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
     public idxPanel: TextPanel;
 
     public logs: LogRecord[];
-    public matches?: ResultSet.MatchMap;
+    public resultSet?: ResultSet;
     public expandedView: boolean;
     public logLevelColors: {[level: string]: string};
 
@@ -17,7 +17,7 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
     // each node stores a TextBuffer which is filled with formatted text
     // then we draw() the contents with dst = logPanel when needed
     public logEntryCache: Map<LogIdx, TextBuffer>;
-    public maxLogEntries: number = 50;
+    public maxLogEntries: number = 200;
 
     constructor(dst: Buffer | Terminal, options: Panel.Options, logDisplayOptions?: Partial<LogDisplayPanel.Options>) {
         super(options, new ScreenBuffer({
@@ -58,6 +58,7 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
 
         this.addChild(this.idxPanel);
         this.addChild(this.logPanel);
+        
     }
 
     public getScreenBuffer(): ScreenBuffer {
@@ -72,7 +73,7 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
 
         const printOptions: LogDisplayPanel.PrintOptions = {
             dst: textBuffer,
-            matches: this.matches,
+            matches: this.resultSet && this.resultSet.matches,
             logLevelColors: this.logLevelColors,
             expandedView: this.expandedView,
             indentStr: ' '.repeat(4),
@@ -102,7 +103,7 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
         return logEntry;
     }
 
-    public drawLogEntry(logEntry: TextBuffer, row: number) {
+    public printLogEntry(logEntry: TextBuffer, row: number) {
         /*
         (logEntry as any).draw({
             x: 0,
@@ -145,6 +146,7 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
     }
 
     /** prints the log at the bottom of the screen, and previous logs above. */
+    // BUG: not all values highlighted
     public printFromBottom(index: number) {
 
         this.logPanel.buffer.fill({char: ' '});
@@ -167,15 +169,15 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
 
             const currentRow = this.logPanel.calculatedHeight - totalLines;
 
-            this.drawIdx(record.idx, currentRow);
-            this.drawLogEntry(logEntry, currentRow);
+            this.printIdx(record.idx, currentRow);
+            this.printLogEntry(logEntry, currentRow);
             // TODO: what happens if currentRow < 0
         }
         // this.redrawChildren();
         // this.drawSelf();
     }
 
-    public drawIdx(idx: LogIdx, row: number) {
+    public printIdx(idx: LogIdx, row: number) {
 
         const idxStr = idx.toString();
 
@@ -264,6 +266,17 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
         }
 
         return linesPrinted;
+    }
+
+    public static getValueHighlightIndexesFilterMatch(filterMatch: FilterMatch, property: PropertyId): number[] {
+        const valueMatch = filterMatch.matches.find((match) => match.value && match.value.property === property);
+
+        if(!valueMatch) {
+            return [];
+        }
+
+        return valueMatch.value!.fuzzyResult.indexes;
+
     }
 
     public static getValueHighlightIndexes(logIdx: LogIdx, property: PropertyId, matches?: ResultSet.MatchMap): number[] {
@@ -376,6 +389,8 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
                 LogDisplayPanel.printHighlightedText(property, printOptions.dst, highlightIndexes, attr, highlightPropertyAttr);
                 printOptions.dst.insert('"', attr);
 
+                printOptions.dst.insert(': ', attr);
+
                 //print value
                 linesPrinted += LogDisplayPanel.printJson(record, value, printOptions, propertyPath!.concat([property]));
                 if(index < keys.length - 1) {
@@ -395,6 +410,7 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
     }
 
     public static printHighlightedText(str: string, dst: TextBuffer, highlightIndexes: number[], attr: Attributes, highlightAttr: Attributes): void {
+        // TODO: optimize includes
         for(let i = 0; i < str.length; i++) {
             if(highlightIndexes.includes(i)) {
                 dst.insert(str[i], highlightAttr);

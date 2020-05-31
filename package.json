@@ -7,7 +7,8 @@
     "start": "node build/src/index.js",
     "dev": "node build/src/index.js scripts/dev.test.js",
     "debug": "node --inspect-brk build/src/index.js",
-    "test": "node_modules/jest/bin/jest.js"
+    "test": "node_modules/jest/bin/jest.js",
+    "profile": "node --prof build/src/index.js"
   },
   "license": "MIT",
   "devDependencies": {

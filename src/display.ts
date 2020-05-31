@@ -13,6 +13,7 @@ export class Display {
     public statusBar: ScreenPanel;
     public queryResults: TextPanel;
     public processPanel: ScreenPanel;
+    public queryBar: ScreenPanel;
     public queryPanel: TextPanel;
 
     constructor(term?: Terminal) {
@@ -69,7 +70,7 @@ export class Display {
 
         this.queryResults = new TextPanel(this.rootPanel.buffer, {
             name: 'queryresults',
-            width: 5,
+            width: 20,
             height: 1,
         });
         this.statusBar.addChild(this.queryResults);
@@ -82,6 +83,23 @@ export class Display {
         });
         this.statusBar.addChild(this.processPanel);
 
+        this.queryBar = new ScreenPanel(this.rootPanel.buffer, {
+            name: 'querybar',
+            width: 1,
+            height: 1,
+            flex: { width: true },
+            flexCol: true
+        });
+        this.rootPanel.addChild(this.queryBar);
+        const queryPromptPanel = new ScreenPanel(this.rootPanel.buffer, {
+            name: 'queryprompt',
+            width: 2,
+            height: 1,
+        });
+        this.queryBar.addChild(queryPromptPanel);
+        (queryPromptPanel.buffer as any).put({x: 0, y: 0}, '>');
+
+
         this.queryPanel = new TextPanel(this.rootPanel.buffer, {
             name: 'query',
             width: 1,
@@ -89,7 +107,7 @@ export class Display {
             flex: { width: true },
             drawCursor: true,
         });
-        this.rootPanel.addChild(this.queryPanel);
+        this.queryBar.addChild(this.queryPanel);
 
         this.rootPanel.resize();
 

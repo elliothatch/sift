@@ -3,9 +3,12 @@ import { createInterface, Interface } from 'readline';
 
 import { spawn, ChildProcessWithoutNullStreams } from 'child_process';
 
+import { concat, merge, fromEvent, race, Subscription, interval } from 'rxjs';
+import { map, skip, tap, debounceTime, throttleTime, publish, filter } from 'rxjs/operators';
+
 import { Display } from './display';
 import { Panel } from './panel';
-import { LogDb, LogRecord, LogIndex, ResultSet } from './logdb';
+import { LogDb, LogRecord, LogIndex, ResultSet, FilterMatch } from './logdb';
 import { Parse, Parser } from './query';
 /*
 const AlertColors: {[level: string]: AlertColor } = {};
@@ -80,29 +83,38 @@ display.terminal.on('key', (name: any, matches: any, data: any) => {
 			display.queryPanel.buffer.backDelete(1);
 			// filterLogs(queryTextBuffer.getText());
 			display.queryPanel.draw();
-			onQueryChanged(display.queryPanel.buffer.getText());
+			onQueryChanged();
 		}
 		else if(name === 'DELETE') {
 			display.queryPanel.buffer.delete(1);
 			// filterLogs(queryTextBuffer.getText());
 			display.queryPanel.draw();
-			onQueryChanged(display.queryPanel.buffer.getText());
+			onQueryChanged();
 		}
 		else if(name === 'TAB') {
 		    // TODO: make this per-panel based on focus
 		    display.logDisplayPanel.expandedView = !display.logDisplayPanel.expandedView;
 		    display.logDisplayPanel.logEntryCache.clear();
-            display.logDisplayPanel.printFromBottom(display.logDisplayPanel.logs.length-1);
             // display.logDisplayPanel.print(0);
-		    display.logDisplayPanel.redrawChildren();
-		    display.logDisplayPanel.draw();
+            drawLogs();
+            drawQueryResult();
+        }
+        // else if(name === 'UP') {
+        // }
+        // else if(name === 'DOWN') {
+        // }{
+        //
+		else if(name === 'ESCAPE') {
+			display.queryPanel.buffer.backDelete((display.queryPanel.buffer as any).cx);
+			display.queryPanel.draw();
+			onQueryChanged();
         }
         else if(data.isCharacter) {
             display.queryPanel.buffer.insert(name);
             display.queryPanel.draw();
             // TODO: create special class/functions LogPanel, that allow adding/removing/setting logs, scrolling, and display options like expanded
             // try {
-			onQueryChanged(display.queryPanel.buffer.getText());
+			onQueryChanged();
             // }
         }
     }
@@ -138,18 +150,68 @@ testLogs.forEach((line) => {
 */
 
 let expr: Parse.Expression[] = [];
-let resultSet: ResultSet | undefined;
 
 const logDisplayPanel = display.logDisplayPanel;
 // const logDisplayPanel: Panel.LogDisplay = display.logPanel.children![0] as Panel.LogDisplay;
 logDisplayPanel.logs = logdb.logs;
 
-const testProcess = createProcess('node', [Path.join(__dirname, '..', '..', 'scripts', 'dev.test.js')]);
+const testProcess = process.argv.length <= 2?
+    createProcess('node', [Path.join(__dirname, '..', '..', 'scripts', 'dev.test.js')]):
+    createProcess(process.argv[2], process.argv.slice(3));
+// const testProcess = createProcess('node', [Path.join(__dirname, '..', '..', 'scripts', 'dev.test.js')]);
 
+// logdb.logSubject.subscribe({
+    // next: (record) => 
+// });
 
-testProcess.stdoutInterface.on('line', (line) => {
-    const record = logdb.ingest(line);
-    if(logDisplayPanel.logs !== logdb.logs) {
+testProcess.stderrInterface.on('line', (line) => {
+    
+});
+
+merge(
+    fromEvent<string>(testProcess.stdoutInterface, 'line').pipe(map((line) => logdb.ingest(line))),
+    fromEvent<string>(testProcess.stderrInterface, 'line').pipe(map((line) => logdb.ingest(line, 'error'))),
+).pipe(
+    // true return = redraw
+    tap((record) => {
+
+        if(logDisplayPanel.logs === logdb.logs || expr.length === 0) {
+            return;
+        }
+
+        const matches = logdb.matchLog(expr[0], record);
+
+        if(matches.length > 0) {
+            logDisplayPanel.logs.push(record);
+            if(logDisplayPanel.resultSet) {
+                matches.forEach((match) => ResultSet.addMatch(match, logDisplayPanel.resultSet!));
+            }
+        }
+    }),
+    throttleTime(1000/60),
+    tap(() => drawQueryResult())
+).subscribe({
+    next: (record) => {
+        drawLogs();
+        drawQueryResult();
+    },
+    complete: () => {
+        drawLogs();
+        drawQueryResult();
+    },
+    error: (error) => {
+        if(error.message === 'max logs') {
+            // do nothing
+            drawLogs();
+            drawQueryResult();
+        }
+        else  {
+            throw error;
+        }
+    }
+});
+
+        /*
         logdb.filter(expr[0], {
             matches: new Map(),
             index: LogIndex.addLogRecord(record, {
@@ -169,12 +231,10 @@ testProcess.stdoutInterface.on('line', (line) => {
                 }
             }
         });
-    }
+        */
+    // }
     // TODO: add scrolling, add indicator for number of new logs since manual scrolling enabled
-    display.logDisplayPanel.printFromBottom(display.logDisplayPanel.logs.length-1);
-    logDisplayPanel.redrawChildren();
-    logDisplayPanel.draw();
-});
+// });
 
 // display.logDisplayPanel.printFromBottom(display.logDisplayPanel.logs.length-1);
             // display.logDisplayPanel.print(0);
@@ -182,14 +242,75 @@ testProcess.stdoutInterface.on('line', (line) => {
 
 // logDisplayPanel.redrawChildren();
 // logDisplayPanel.draw();
+const spinner = ['\\', '|', '/', '--'];
+let spinnerEnabled = false;
+let spinnerIndex = 0;
 
-function onQueryChanged(query: string) {
+let filterSubscription: Subscription | undefined = undefined;
+function onQueryChanged() {
+    const query = display.queryPanel.buffer.getText();
     try {
         expr = parser.parse(query);
     }
     catch(err) {
         // TODO: show user reason their query is invalid
     }
+
+    if(filterSubscription) {
+        filterSubscription.unsubscribe();
+        filterSubscription = undefined;
+    }
+
+    logDisplayPanel.resultSet = undefined;
+
+    logDisplayPanel.logEntryCache.clear();
+
+    if(expr.length === 0) {
+        logDisplayPanel.logs = logdb.logs;
+        drawLogs();
+        drawQueryResult();
+        return;
+    }
+
+    const displayedLogs: LogRecord[] = [];
+    logDisplayPanel.logs = displayedLogs;
+
+
+    spinnerEnabled = true;
+    filterSubscription = logdb.filterAll(expr[0]).pipe(
+        tap(({record, matches, resultSet}) => {
+            if(!logDisplayPanel.resultSet) {
+                logDisplayPanel.resultSet = resultSet;
+            }
+
+            // displayedLogs.push(record);
+            insertSorted(record, displayedLogs, (a, b) => a.idx - b.idx);
+
+            // TODO: don't redraw when we don't need to
+            // logDisplayPanel.printFromBottom(displayedLogs.length - 1);
+
+            // logDisplayPanel.redrawChildren();
+            // logDisplayPanel.draw();
+            // results.matches.forEach((matches, logIdx) => displayedLogs.push(logdb.logs[logIdx]));
+        }),
+        publish((published) => race(concat(interval(100), published), published.pipe(skip(logDisplayPanel.calculatedHeight)))),
+        throttleTime(1000/60)
+        // publish((published) => race(published.pipe(debounceTime(1000/60)), published.pipe(skip(1))))
+    ).subscribe({
+        next: () => {
+            drawLogs();
+            drawQueryResult();
+        },
+        complete: () => {
+            spinnerEnabled = false;
+            drawLogs();
+            drawQueryResult();
+        },
+    });
+
+
+
+    /*
     if(expr.length > 0) {
         exitLogs.push({message: expr[0]});
         logdb.filter(expr[0]).subscribe({
@@ -228,12 +349,32 @@ function onQueryChanged(query: string) {
         display.logDisplayPanel.printFromBottom(display.logDisplayPanel.logs.length-1);
         // logDisplayPanel.print(0);
     }
+    */
 
+    // logDisplayPanel.redrawChildren();
+    // logDisplayPanel.draw();
+
+    // (display.queryResults.buffer as any).setText('');
+    // (display.queryResults.buffer as any).moveTo(0, 0);
+    // display.queryResults.buffer.insert(`${logDisplayPanel.logs.length}/${logdb.logs.length}`);
+
+    // display.queryResults.draw();
+}
+
+function drawLogs() {
+    logDisplayPanel.printFromBottom(logDisplayPanel.logs.length - 1);
     logDisplayPanel.redrawChildren();
     logDisplayPanel.draw();
+}
 
+function drawQueryResult() {
     (display.queryResults.buffer as any).setText('');
-    (display.queryResults.buffer as any).moveTo(0, 0);
+    if(spinnerEnabled) {
+        (display.queryResults.buffer as any).moveTo(0, 0);
+        display.queryResults.buffer.insert(spinner[spinnerIndex]);
+        spinnerIndex = (spinnerIndex + 1) % spinner.length;
+    }
+    (display.queryResults.buffer as any).moveTo(2, 0);
     display.queryResults.buffer.insert(`${logDisplayPanel.logs.length}/${logdb.logs.length}`);
 
     display.queryResults.draw();
@@ -255,6 +396,20 @@ function close() {
         }
     });
     process.exit();
+}
+
+// TODO: use binary search
+function insertSorted<T>(t: T, arr: Array<T>, comparator: (a: T, b: T) => number): number {
+    for(let i = 0; i < arr.length; i++) {
+        const result = comparator(arr[i], t);
+        if(result >= 0) {
+            arr.splice(i, 0, t);
+            return i;
+        }
+    }
+
+    arr.push(t);
+    return arr.length - 1;
 }
 
 // const targetProcess = createProcess(process.argv[2], process.argv.slice(3));
