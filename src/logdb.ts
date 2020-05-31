@@ -323,7 +323,7 @@ export class LogDb {
     }
 
     /** parses a raw string, then records it in the database and indexes it */
-    public ingest(line: string) {
+    public ingest(line: string): LogRecord {
 
         const log = parseLog(line);
         const record = {
@@ -336,9 +336,13 @@ export class LogDb {
 
         LogIndex.addLogRecord(record, this.logIndex);
         // filterSingleLog(queryTextBuffer.getText(), logOffset, indexResults.properties, indexResults.values);
+
+        return record;
     }
 
     // TODO: return an observable of Result instead of resultset, so we can stream each match in as its found. this requires knowing that there are no more AND clauses that a particular log might be filtered by. generally a different approach to how we handle query execution, and will require some reworking
+    // TODO: we need to change how the logs are added to the result set.
+    // filtering large amounts of logs becomes extremely slow 
     public filter(query: Parse.Expression, searchSet?: ResultSet): Observable<ResultSet> {
         if(!searchSet) {
             searchSet = {

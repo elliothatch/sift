@@ -1,5 +1,9 @@
 import * as fuzzysort from 'fuzzysort';
 
+// TODO: fix bug with evaluation
+// MATCH FULL -- property:!value
+// does not exclude logs where value matches the property-value pair
+
 export interface Query {
     property?: string;
     excludeProperty: boolean;

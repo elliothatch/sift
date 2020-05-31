@@ -1,6 +1,7 @@
 import {terminal, Terminal, Buffer, ScreenBuffer, TextBuffer} from 'terminal-kit';
 
-import { ScreenPanel, TextPanel, LogDisplayPanel } from './panel';
+import { ScreenPanel, TextPanel } from './panel';
+import { LogDisplayPanel } from './logdisplaypanel';
 
 export class Display {
 
@@ -108,8 +109,8 @@ export class Display {
     public draw() {
         // this.rootPanel.buffer.fill({char: '1', attr: {color: 'black', bgColor: 'red'}});
         // this.logPanel.buffer.fill({char: '2', attr: {color: 'black', bgColor: 'green'}});
-        this.logDisplayPanel.idxPanel.buffer.dst.fill({char: '3', attr: {color: 'black', bgColor: 'green'}});
-        this.logDisplayPanel.logPanel.buffer.dst.fill({char: '4', attr: {color: 'black', bgColor: 'blue'}});
+        // this.logDisplayPanel.idxPanel.buffer.dst.fill({char: '3', attr: {color: 'black', bgColor: 'green'}});
+        // this.logDisplayPanel.logPanel.buffer.dst.fill({char: '4', attr: {color: 'black', bgColor: 'blue'}});
         // this.statusBar.buffer.fill({char: '5', attr: {color: 'black', bgColor: 'green'}});
         // this.queryResults.buffer.fill({char: '6', attr: {color: 'black', bgColor: 'brightred'}});
         // this.processPanel.buffer.fill({char: '7', attr: {color: 'black', bgColor: 'yellow'}});
