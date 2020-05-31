@@ -307,11 +307,13 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
         let text: string;
 
         // prepare value
-        if(typeof obj === 'undefined') {
+        if(obj === undefined) {
             text = 'undefined';
         }
-        if(obj === null) {
+        else if(obj === null) {
             text = 'null';
+        } else {
+            text = obj.toString();
         }
 
         // this doesn't work because of the way the highlight indexes are set up
@@ -321,12 +323,12 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
         // }
 
         // print
-        if(typeof obj === 'string' || typeof obj === 'number') {
+        if(obj == null || typeof obj === 'string' || typeof obj === 'number') {
             if(typeof obj === 'string') {
                 printOptions.dst.insert('"', attr);
             }
 
-            LogDisplayPanel.printHighlightedText(obj.toString(), printOptions.dst, LogDisplayPanel.getValueHighlightIndexes(record.idx, propertyPath.join('.'), printOptions.matches), attr, highlightValueAttr);
+            LogDisplayPanel.printHighlightedText(text, printOptions.dst, LogDisplayPanel.getValueHighlightIndexes(record.idx, propertyPath.join('.'), printOptions.matches), attr, highlightValueAttr);
 
             if(typeof obj === 'string') {
                 printOptions.dst.insert('"', attr);

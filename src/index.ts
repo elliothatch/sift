@@ -174,7 +174,6 @@ merge(
 ).pipe(
     // true return = redraw
     tap((record) => {
-
         if(logDisplayPanel.logs === logdb.logs || expr.length === 0) {
             return;
         }
@@ -189,7 +188,6 @@ merge(
         }
     }),
     throttleTime(1000/60),
-    tap(() => drawQueryResult())
 ).subscribe({
     next: (record) => {
         drawLogs();
