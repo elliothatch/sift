@@ -58,7 +58,6 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
 
         this.addChild(this.idxPanel);
         this.addChild(this.logPanel);
-        
     }
 
     public getScreenBuffer(): ScreenBuffer {
@@ -163,6 +162,10 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
                 break;
             }
 
+            if(i >= this.logs.length) {
+                continue;
+            }
+
             const record = this.logs[i];
             const logEntry = this.getLogEntry(record);
             totalLines += logEntry.getContentSize().height;
@@ -179,13 +182,19 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
 
     public printIdx(idx: LogIdx, row: number) {
 
+        const attr = idx % 10 === 0?
+            {color: 'brightWhite', bold: true}:
+            idx % 2 === 1?
+            {inverse: true, color: 'grey'}:
+            {inverse: true, color: 'white'};
+
         const idxStr = idx.toString();
 
         (this.idxPanel.buffer as any).moveTo(
             this.idxPanel.options.width - idxStr.length - 1,
             row);
 
-        this.idxPanel.buffer.insert(idxStr);
+        this.idxPanel.buffer.insert(idxStr, attr);
     }
 
     /** 

@@ -4,9 +4,9 @@
   "main": "build/index.js",
   "scripts": {
     "build": "node node_modules/.bin/tsc",
-    "start": "node build/src/index.js",
-    "dev": "node build/src/index.js scripts/dev.test.js",
-    "debug": "node --inspect-brk build/src/index.js",
+    "start": "node --enable-source-maps build/src/index.js",
+    "dev": "node --enable-source-maps build/src/index.js scripts/dev.test.js",
+    "debug": "node --enable-source-maps --inspect-brk build/src/index.js",
     "test": "node_modules/jest/bin/jest.js",
     "profile": "node --prof build/src/index.js"
   },

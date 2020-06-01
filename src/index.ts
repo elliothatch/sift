@@ -288,11 +288,13 @@ queryChangedSubject.pipe(
             return;
         }
 
+        spinnerEnabled = true;
+        drawQueryResult();
+
         const displayedLogs: LogRecord[] = [];
         logDisplayPanel.logs = displayedLogs;
 
 
-        spinnerEnabled = true;
         filterSubscription = logdb.filterAll(expr[0]).pipe(
             tap(({record, matches, resultSet}) => {
                 if(!logDisplayPanel.resultSet) {

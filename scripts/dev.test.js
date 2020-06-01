@@ -3,7 +3,7 @@ const freshlog = require('freshlog');
 const rxjs = require('rxjs');
 
 const logMode = 1;
-const logDelay = 5;
+const logDelay = 10;
 const initialTreeDepth = 3;
 
 const messageNouns = [
