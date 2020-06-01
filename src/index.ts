@@ -3,8 +3,8 @@ import { createInterface, Interface } from 'readline';
 
 import { spawn, ChildProcessWithoutNullStreams } from 'child_process';
 
-import { concat, merge, fromEvent, race, Subscription, interval } from 'rxjs';
-import { map, skip, tap, debounceTime, throttleTime, publish, filter } from 'rxjs/operators';
+import { EMPTY, concat, merge, fromEvent, race, Subscription, interval, Subject } from 'rxjs';
+import { mergeMap, map, skip, tap, debounceTime, auditTime, publish, filter } from 'rxjs/operators';
 
 import { Display } from './display';
 import { Panel } from './panel';
@@ -69,6 +69,9 @@ display.init();
 const logdb = new LogDb();
 const parser = new Parser();
 
+
+let cursorPause = -1;
+
 display.terminal.on('key', (name: any, matches: any, data: any) => {
 	try {
 		if(name === 'CTRL_C') {
@@ -99,11 +102,19 @@ display.terminal.on('key', (name: any, matches: any, data: any) => {
             drawLogs();
             drawQueryResult();
         }
-        // else if(name === 'UP') {
-        // }
-        // else if(name === 'DOWN') {
-        // }{
-        //
+        else if(name === 'UP') {
+            if(cursorPause < 0) {
+                cursorPause = display.logDisplayPanel.logs.length - 1;
+                drawLogs();
+            }
+            else if(cursorPause > 0) {
+                cursorPause--;
+                drawLogs();
+            }
+        }
+        else if(name === 'DOWN') {
+            cursorPause = -1;
+        }
 		else if(name === 'ESCAPE') {
 			display.queryPanel.buffer.backDelete((display.queryPanel.buffer as any).cx);
 			display.queryPanel.draw();
@@ -164,10 +175,6 @@ const testProcess = process.argv.length <= 2?
     // next: (record) => 
 // });
 
-testProcess.stderrInterface.on('line', (line) => {
-    
-});
-
 merge(
     fromEvent<string>(testProcess.stdoutInterface, 'line').pipe(map((line) => logdb.ingest(line))),
     fromEvent<string>(testProcess.stderrInterface, 'line').pipe(map((line) => logdb.ingest(line, 'error'))),
@@ -187,7 +194,7 @@ merge(
             }
         }
     }),
-    throttleTime(1000/60),
+    auditTime(1000/60),
 ).subscribe({
     next: (record) => {
         drawLogs();
@@ -245,66 +252,82 @@ let spinnerEnabled = false;
 let spinnerIndex = 0;
 
 let filterSubscription: Subscription | undefined = undefined;
+
+const queryChangedSubject = new Subject();
 function onQueryChanged() {
-    const query = display.queryPanel.buffer.getText();
-    try {
-        expr = parser.parse(query);
-    }
-    catch(err) {
-        // TODO: show user reason their query is invalid
-    }
+    queryChangedSubject.next();
+}
 
-    if(filterSubscription) {
-        filterSubscription.unsubscribe();
-        filterSubscription = undefined;
-    }
+const queryUpdateDelay = 100;
 
-    logDisplayPanel.resultSet = undefined;
+queryChangedSubject.pipe(
+    debounceTime(150),
+    tap(() => {
+        const query = display.queryPanel.buffer.getText();
+        try {
+            expr = parser.parse(query);
+        }
+        catch(err) {
+            // TODO: show user reason their query is invalid
+            return;
+        }
 
-    logDisplayPanel.logEntryCache.clear();
+        if(filterSubscription) {
+            filterSubscription.unsubscribe();
+            filterSubscription = undefined;
+        }
 
-    if(expr.length === 0) {
-        logDisplayPanel.logs = logdb.logs;
-        drawLogs();
-        drawQueryResult();
-        return;
-    }
+        logDisplayPanel.resultSet = undefined;
 
-    const displayedLogs: LogRecord[] = [];
-    logDisplayPanel.logs = displayedLogs;
+        logDisplayPanel.logEntryCache.clear();
 
-
-    spinnerEnabled = true;
-    filterSubscription = logdb.filterAll(expr[0]).pipe(
-        tap(({record, matches, resultSet}) => {
-            if(!logDisplayPanel.resultSet) {
-                logDisplayPanel.resultSet = resultSet;
-            }
-
-            // displayedLogs.push(record);
-            insertSorted(record, displayedLogs, (a, b) => a.idx - b.idx);
-
-            // TODO: don't redraw when we don't need to
-            // logDisplayPanel.printFromBottom(displayedLogs.length - 1);
-
-            // logDisplayPanel.redrawChildren();
-            // logDisplayPanel.draw();
-            // results.matches.forEach((matches, logIdx) => displayedLogs.push(logdb.logs[logIdx]));
-        }),
-        publish((published) => race(concat(interval(100), published), published.pipe(skip(logDisplayPanel.calculatedHeight)))),
-        throttleTime(1000/60)
-        // publish((published) => race(published.pipe(debounceTime(1000/60)), published.pipe(skip(1))))
-    ).subscribe({
-        next: () => {
+        if(expr.length === 0) {
+            logDisplayPanel.logs = logdb.logs;
             drawLogs();
             drawQueryResult();
-        },
-        complete: () => {
-            spinnerEnabled = false;
-            drawLogs();
-            drawQueryResult();
-        },
-    });
+            return;
+        }
+
+        const displayedLogs: LogRecord[] = [];
+        logDisplayPanel.logs = displayedLogs;
+
+
+        spinnerEnabled = true;
+        filterSubscription = logdb.filterAll(expr[0]).pipe(
+            tap(({record, matches, resultSet}) => {
+                if(!logDisplayPanel.resultSet) {
+                    logDisplayPanel.resultSet = resultSet;
+                }
+
+                // displayedLogs.push(record);
+                insertSorted(record, displayedLogs, (a, b) => a.idx - b.idx);
+
+                // TODO: don't redraw when we don't need to
+                // logDisplayPanel.printFromBottom(displayedLogs.length - 1);
+
+                // logDisplayPanel.redrawChildren();
+                // logDisplayPanel.draw();
+                // results.matches.forEach((matches, logIdx) => displayedLogs.push(logdb.logs[logIdx]));
+            }),
+            auditTime(1000/60),
+            // publish((published) => race(concat(published.pipe(auditTime(1000/60))), published.pipe(skip(logDisplayPanel.calculatedHeight)))),
+            // publish((published) => race(published.pipe(debounceTime(1000/60)), published.pipe(skip(1))))
+        ).subscribe({
+            next: () => {
+                drawLogs();
+                drawQueryResult();
+            },
+            complete: () => {
+                spinnerEnabled = false;
+                drawLogs();
+                drawQueryResult();
+            },
+        });
+    })
+).subscribe({
+    next: () => {
+    }
+});
 
 
 
@@ -357,10 +380,14 @@ function onQueryChanged() {
     // display.queryResults.buffer.insert(`${logDisplayPanel.logs.length}/${logdb.logs.length}`);
 
     // display.queryResults.draw();
-}
 
 function drawLogs() {
-    logDisplayPanel.printFromBottom(logDisplayPanel.logs.length - 1);
+    if(cursorPause < 0) {
+        logDisplayPanel.printFromBottom(logDisplayPanel.logs.length - 1);
+    }
+    else {
+        logDisplayPanel.printFromBottom(cursorPause);
+    }
     logDisplayPanel.redrawChildren();
     logDisplayPanel.draw();
 }
