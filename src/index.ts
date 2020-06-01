@@ -2,6 +2,7 @@ import * as Path from 'path';
 import { createInterface, Interface } from 'readline';
 
 import { spawn, ChildProcessWithoutNullStreams } from 'child_process';
+import { Worker, isMainThread, parentPort, workerData } from 'worker_threads';
 
 import { EMPTY, concat, merge, fromEvent, race, Subscription, interval, Subject } from 'rxjs';
 import { mergeMap, map, skip, tap, debounceTime, auditTime, publish, filter } from 'rxjs/operators';
@@ -10,6 +11,10 @@ import { Display } from './display';
 import { Panel } from './panel';
 import { LogDb, LogRecord, LogIndex, ResultSet, FilterMatch } from './logdb';
 import { Parse, Parser } from './query';
+
+
+new Worker
+
 /*
 const AlertColors: {[level: string]: AlertColor } = {};
 
@@ -294,6 +299,7 @@ queryChangedSubject.pipe(
         const displayedLogs: LogRecord[] = [];
         logDisplayPanel.logs = displayedLogs;
 
+        let worker = new Worker(Path.join(__dirname, 'filter-worker.js'));
 
         filterSubscription = logdb.filterAll(expr[0]).pipe(
             tap(({record, matches, resultSet}) => {

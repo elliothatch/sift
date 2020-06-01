@@ -1106,6 +1106,11 @@ domexception@^1.0.1:
   dependencies:
     webidl-conversions "^4.0.2"
 
+dsjslib@^0.6.14:
+  version "0.6.14"
+  resolved "https://registry.yarnpkg.com/dsjslib/-/dsjslib-0.6.14.tgz#b64686638636da75dd72d01158f7b619e5429a4f"
+  integrity sha1-tkaGY4Y22nXdctARWPe2GeVCmk8=
+
 ecc-jsbn@~0.1.1:
   version "0.1.2"
   resolved "https://registry.yarnpkg.com/ecc-jsbn/-/ecc-jsbn-0.1.2.tgz#3a83a904e54353287874c564b7549386849a98c9"

@@ -1,7 +1,7 @@
 import {Readable} from 'stream';
 import * as fuzzysort from 'fuzzysort';
 
-import { EMPTY, from, merge, Observable, Subject, of, forkJoin, timer } from 'rxjs';
+import { EMPTY, from, merge, Observable, Subject, of, forkJoin, timer, defer } from 'rxjs';
 import { map, mergeMap, filter, toArray, tap, delay } from 'rxjs/operators';
 
 import { Parse } from './query';
@@ -585,26 +585,28 @@ export class LogDb {
             }
         };
 
-        const filterObservables: Array<Observable<FilterMatch>> = [];
+        const filterSubject: Subject<FilterMatch> = new Subject();
 
-        // TODO: add sampling options
-        for(let i = this.logs.length - 1; i >= 0; i--) {
-            filterObservables.push(of(i).pipe(
-                map((idx) => {
-                    const record = this.logs[idx];
-                    const matches = this.matchLog(query, record);
-                    matches.forEach((match) => ResultSet.addMatch(match, filteredResultSet))
-                    return {
-                        record,
-                        matches,
-                        resultSet: filteredResultSet
-                    };
-                }),
-                filter((match) => match.matches.length > 0),
-            ));
-        }
+        return defer(() => {
+            // TODO: add sampling options
+            for(let i = this.logs.length - 1; i >= 0; i--) {
+                const record = this.logs[idx];
+                const matches = this.matchLog(query, record);
+                matches.forEach((match) => ResultSet.addMatch(match, filteredResultSet))
 
-        return merge(...filterObservables);
+                if(matches.length === 0) {
+                    continue;
+                }
+
+                filterSubject.next({
+                    record,
+                    matches,
+                    resultSet: filteredResultSet
+                });
+            }
+
+            filterSubject.complete();
+        });
     }
 
     public filterOne(query: Parse.Expression, record: LogRecord): Observable<ResultSet> {
