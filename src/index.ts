@@ -106,20 +106,19 @@ display.terminal.on('key', (name: any, matches: any, data: any) => {
 		    display.logDisplayPanel.logEntryCache.clear();
             // display.logDisplayPanel.print(0);
             drawLogs();
-            drawQueryResult();
         }
         else if(name === 'UP') {
             if(cursorPause < 0) {
-                cursorPause = display.logDisplayPanel.logs.length - 1;
-                drawLogs();
+                cursorPause = display.logDisplayPanel.logs.length - 2;
             }
             else if(cursorPause > 0) {
                 cursorPause--;
-                drawLogs();
             }
+            drawLogs();
         }
         else if(name === 'DOWN') {
             cursorPause = -1;
+            drawLogs();
         }
 		else if(name === 'ESCAPE') {
 			display.queryPanel.buffer.backDelete((display.queryPanel.buffer as any).cx);
@@ -209,16 +208,16 @@ merge(
         // drawLogs();
         // drawQueryResult();
     },
-    error: (error) => {
-        if(error.message === 'max logs') {
+    // error: (error) => {
+        // if(error.message === 'max logs') {
             // do nothing
-            drawLogs();
-            drawQueryResult();
-        }
-        else  {
-            throw error;
-        }
-    }
+            // drawLogs();
+            // drawQueryResult();
+        // }
+        // else  {
+            // throw error;
+        // }
+    // }
 });
 
         /*

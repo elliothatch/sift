@@ -321,6 +321,7 @@ export class LogDb {
     public fuzzysortThreshold: number;
 
     public logSubject: Subject<LogRecord>;
+    // public maxLogEntries = 1000000;
 
     constructor() {
         this.logs = [];
@@ -337,9 +338,9 @@ export class LogDb {
 
     /** parses a raw string, then records it in the database and indexes it */
     public ingest(line: string, level?: string): LogRecord {
-        if(this.logs.length > 100000) {
-            throw new Error('max logs');
-        }
+        // if(this.logs.length > this.maxLogEntries) {
+            // throw new Error('max logs');
+        // }
 
         const log = parseLog(line);
         if(level) {
