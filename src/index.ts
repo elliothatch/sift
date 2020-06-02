@@ -4,8 +4,9 @@ import { createInterface, Interface } from 'readline';
 import { spawn, ChildProcessWithoutNullStreams } from 'child_process';
 import { Worker, isMainThread, parentPort, workerData } from 'worker_threads';
 
-import { EMPTY, concat, merge, fromEvent, race, Subscription, interval, Subject } from 'rxjs';
-import { mergeMap, map, skip, tap, debounceTime, auditTime, publish, filter } from 'rxjs/operators';
+import { of, EMPTY, concat, merge, fromEvent, race, Subscription, interval, Subject } from 'rxjs';
+import { mergeMap, map, skip, tap, debounceTime, auditTime, publish, filter, take, takeUntil, delay } from 'rxjs/operators';
+import { SkipList } from 'dsjslib';
 
 import { Display } from './display';
 import { Panel } from './panel';
@@ -13,7 +14,7 @@ import { LogDb, LogRecord, LogIndex, ResultSet, FilterMatch } from './logdb';
 import { Parse, Parser } from './query';
 
 
-new Worker
+// let worker = new Worker(Path.join(__dirname, 'filter-worker.js'));
 
 /*
 const AlertColors: {[level: string]: AlertColor } = {};
@@ -199,15 +200,14 @@ merge(
             }
         }
     }),
-    auditTime(1000/60),
 ).subscribe({
     next: (record) => {
         drawLogs();
         drawQueryResult();
     },
     complete: () => {
-        drawLogs();
-        drawQueryResult();
+        // drawLogs();
+        // drawQueryResult();
     },
     error: (error) => {
         if(error.message === 'max logs') {
@@ -256,6 +256,8 @@ const spinner = ['\\', '|', '/', '--'];
 let spinnerEnabled = false;
 let spinnerIndex = 0;
 
+let blockDrawLog = false;
+
 let filterSubscription: Subscription | undefined = undefined;
 
 const queryChangedSubject = new Subject();
@@ -280,6 +282,7 @@ queryChangedSubject.pipe(
         if(filterSubscription) {
             filterSubscription.unsubscribe();
             filterSubscription = undefined;
+            spinnerEnabled = false;
         }
 
         logDisplayPanel.resultSet = undefined;
@@ -294,20 +297,26 @@ queryChangedSubject.pipe(
         }
 
         spinnerEnabled = true;
+        blockDrawLog = true;
         drawQueryResult();
 
+        /** store logs in reverse order so we can easily iterate from the latest entry */
+        // const displayedLogs: SkipList<LogIdx, LogRecord> = new SkipList((a: number, b: number) => b - a);
         const displayedLogs: LogRecord[] = [];
         logDisplayPanel.logs = displayedLogs;
 
-        let worker = new Worker(Path.join(__dirname, 'filter-worker.js'));
 
-        filterSubscription = logdb.filterAll(expr[0]).pipe(
+        filterSubscription = merge(
+            logdb.filterAll(expr[0]),
+            // below prevents annoying visual flicker when starting search
+            interval(1000/60).pipe(take(1), tap(() => blockDrawLog = false), mergeMap(() => EMPTY)),
+        ).pipe(
             tap(({record, matches, resultSet}) => {
                 if(!logDisplayPanel.resultSet) {
                     logDisplayPanel.resultSet = resultSet;
                 }
 
-                // displayedLogs.push(record);
+                // filteredLogs.put(record.idx, record);
                 insertSorted(record, displayedLogs, (a, b) => a.idx - b.idx);
 
                 // TODO: don't redraw when we don't need to
@@ -317,13 +326,21 @@ queryChangedSubject.pipe(
                 // logDisplayPanel.draw();
                 // results.matches.forEach((matches, logIdx) => displayedLogs.push(logdb.logs[logIdx]));
             }),
+            // TODO: this is ridiculous
             auditTime(1000/60),
+            tap(() => drawLogs()),
+
+            publish((published) => merge(
+                interval(1000/60).pipe(takeUntil(concat(published, of(true)))),
+                published)),
+            auditTime(1000/60),
+            tap(() => drawQueryResult()),
             // publish((published) => race(concat(published.pipe(auditTime(1000/60))), published.pipe(skip(logDisplayPanel.calculatedHeight)))),
             // publish((published) => race(published.pipe(debounceTime(1000/60)), published.pipe(skip(1))))
         ).subscribe({
             next: () => {
-                drawLogs();
-                drawQueryResult();
+                // drawLogs();
+                // drawQueryResult();
             },
             complete: () => {
                 spinnerEnabled = false;
@@ -389,28 +406,49 @@ queryChangedSubject.pipe(
 
     // display.queryResults.draw();
 
+const drawLogsLimiter = new Subject();
+
+drawLogsLimiter.pipe(
+    auditTime(1000/60),
+    filter(() => !blockDrawLog)
+).subscribe({
+    next: () => {
+        if(cursorPause < 0) {
+            logDisplayPanel.printFromBottom(logDisplayPanel.logs.length - 1);
+        }
+        else {
+            logDisplayPanel.printFromBottom(cursorPause);
+        }
+        logDisplayPanel.redrawChildren();
+        logDisplayPanel.draw();
+    }
+})
+
 function drawLogs() {
-    if(cursorPause < 0) {
-        logDisplayPanel.printFromBottom(logDisplayPanel.logs.length - 1);
-    }
-    else {
-        logDisplayPanel.printFromBottom(cursorPause);
-    }
-    logDisplayPanel.redrawChildren();
-    logDisplayPanel.draw();
+    drawLogsLimiter.next();
 }
 
-function drawQueryResult() {
-    (display.queryResults.buffer as any).setText('');
-    if(spinnerEnabled) {
-        (display.queryResults.buffer as any).moveTo(0, 0);
-        display.queryResults.buffer.insert(spinner[spinnerIndex]);
-        spinnerIndex = (spinnerIndex + 1) % spinner.length;
-    }
-    (display.queryResults.buffer as any).moveTo(2, 0);
-    display.queryResults.buffer.insert(`${logDisplayPanel.logs.length}/${logdb.logs.length}`);
+const drawQueryResultLimiter = new Subject();
 
-    display.queryResults.draw();
+drawQueryResultLimiter.pipe(
+    auditTime(1000/60)
+).subscribe({
+    next: () => {
+        (display.queryResults.buffer as any).setText('');
+        if(spinnerEnabled) {
+            (display.queryResults.buffer as any).moveTo(0, 0);
+            display.queryResults.buffer.insert(spinner[spinnerIndex]);
+            spinnerIndex = (spinnerIndex + 1) % spinner.length;
+        }
+        (display.queryResults.buffer as any).moveTo(2, 0);
+        display.queryResults.buffer.insert(`${logDisplayPanel.logs.length}/${logdb.logs.length}`);
+
+        display.queryResults.draw();
+    }
+});
+
+function drawQueryResult() {
+    drawQueryResultLimiter.next();
 }
 
 

@@ -1,4 +1,5 @@
 import {Attributes, Terminal, Buffer, ScreenBuffer, TextBuffer} from 'terminal-kit';
+import {SkipList} from 'dsjslib';
 
 import { Panel, ScreenPanel, TextPanel } from './panel';
 import {LogRecord, LogIdx, PropertyId, ResultSet, FilterMatch } from './logdb';
@@ -8,6 +9,7 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
     public logPanel: ScreenPanel;
     public idxPanel: TextPanel;
 
+    // public logs: SkipList<LogIdx, LogRecord>;
     public logs: LogRecord[];
     public resultSet?: ResultSet;
     public expandedView: boolean;
@@ -47,8 +49,8 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
         this.logEntryCache = new Map();
 
         // TODO: width/height calculation is wrong if FLEX enabled?? */
-        this.options.flexCol = true;
         this.logs = [];
+        this.options.flexCol = true;
         this.expandedView = false;
         this.logLevelColors = logDisplayOptions && logDisplayOptions.logLevelColors || {
             info: 'bold',
@@ -157,6 +159,7 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
         (this.idxPanel.buffer as any).moveTo(0, 0);
 
         let totalLines = 0;
+
         for(let i = index; i >= 0; i--) {
             if(totalLines >= this.logPanel.calculatedHeight) {
                 break;
@@ -432,6 +435,23 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
         }
     }
 }
+
+/**
+ * Get all entries(sorted). They are returned as key value pair objects
+ * @memberOf SkipList.prototype
+ * @returns {Array} Array of objects {key:<K>,value:<V>}
+ */
+function iterateSkipList<K,V>(skipList: SkipList<K,V>, callback: (element: {key: K, value: V}) => void) {
+    let baseList = skipList.top_, entries = [], node;
+    while (baseList.down) {
+        baseList = baseList.down;
+    }
+    node = baseList.next;
+    while (node && node.key/*don't list boundary nodes*/) {
+        callback({'key' : node.key as K, 'value' : node.value as V});
+        node = node.next;
+    }
+};
 
 export namespace LogDisplayPanel {
     export interface Options {

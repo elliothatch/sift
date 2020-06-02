@@ -1,7 +1,7 @@
 import {Readable} from 'stream';
 import * as fuzzysort from 'fuzzysort';
 
-import { EMPTY, from, merge, Observable, Subject, of, forkJoin, timer, defer } from 'rxjs';
+import { concat, EMPTY, from, merge, Observable, Subject, of, forkJoin, timer, defer } from 'rxjs';
 import { map, mergeMap, filter, toArray, tap, delay } from 'rxjs/operators';
 
 import { Parse } from './query';
@@ -256,7 +256,7 @@ export namespace ResultSet {
         }
     }
 
-    export function addMatch(match: Match, resultSet: ResultSet): ResultSet {
+    export function addMatch(match: Match, resultSet: ResultSet, skipIndex?: boolean): ResultSet {
         let resultMatch = resultSet.matches.get(match.logRecord.idx);
         if(!resultMatch) {
             resultMatch = {
@@ -266,14 +266,16 @@ export namespace ResultSet {
             resultSet.matches.set(match.logRecord.idx, resultMatch);
         }
 
-        LogIndex.addLogRecord(match.logRecord, resultSet.index);
-
         if(match.property) {
             resultMatch.property.push(match);
         }
 
         if(match.value) {
             resultMatch.value.push(match);
+        }
+
+        if(skipIndex) {
+            LogIndex.addLogRecord(match.logRecord, resultSet.index);
         }
 
         return resultSet;
@@ -585,28 +587,43 @@ export class LogDb {
             }
         };
 
-        const filterSubject: Subject<FilterMatch> = new Subject();
+        const _this = this;
+        function batchFilter(startIndex: number, batchSize: number): Observable<FilterMatch> {
+            return concat(
+                new Observable<FilterMatch>((subscriber) => {
+                    for(let i = 0; i < batchSize; i++) {
+                        const index = startIndex - i;
+                        if(index < 0) {
+                            break;
+                        }
 
-        return defer(() => {
-            // TODO: add sampling options
-            for(let i = this.logs.length - 1; i >= 0; i--) {
-                const record = this.logs[idx];
-                const matches = this.matchLog(query, record);
-                matches.forEach((match) => ResultSet.addMatch(match, filteredResultSet))
+                        const record = _this.logs[index];
+                        const matches = _this.matchLog(query, record);
+                        matches.forEach((match) => ResultSet.addMatch(match, filteredResultSet, true))
 
-                if(matches.length === 0) {
-                    continue;
-                }
+                        if(matches.length === 0) {
+                            continue;
+                        }
 
-                filterSubject.next({
-                    record,
-                    matches,
-                    resultSet: filteredResultSet
-                });
-            }
+                        subscriber.next({
+                            record,
+                            matches,
+                            resultSet: filteredResultSet
+                        });
+                    }
 
-            filterSubject.complete();
-        });
+                    subscriber.complete();
+                }).pipe(delay(0)), // allow interruption
+                startIndex - batchSize >= 0?
+                    batchFilter(startIndex - batchSize, batchSize):
+                    EMPTY
+            );
+        }
+
+        // batched to allow interruption during large searches
+        //TODO: is batch scaling really doing anything?
+        const batchSize = Math.max(150, Math.min(1000, Math.floor(this.logs.length * 0.05)));
+        return batchFilter(this.logs.length - 1, batchSize);
     }
 
     public filterOne(query: Parse.Expression, record: LogRecord): Observable<ResultSet> {
