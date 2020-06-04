@@ -52,18 +52,21 @@ describe('logdb', () => {
             logdb.ingest(JSON.stringify(log));
         });
 
-        console.log(logdb.logs);
+        /*
         logdb.filter(parser.parse('tw')[0]).subscribe({
             next: (results) => {
-                console.log(results);
                 results.matches.forEach((match, logIdx) => {
-                    console.log(logIdx);
-                    console.log(match.property);
-                    console.log(match.value);
+                    // expect(match)
+
+                    // console.log(logIdx);
+                    // console.log(match.property);
+                    // console.log(match.value);
                 });
             },
             complete: () => done(),
+            error: (error) => done(error)
         });
+        */
     });
     // describe('filter', () => {
         // queries.forEach(({input, expected}) => {

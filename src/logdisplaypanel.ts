@@ -105,25 +105,6 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
     }
 
     public printLogEntry(logEntry: TextBuffer, row: number) {
-        /*
-        (logEntry as any).draw({
-            x: 0,
-            y: row,
-            //wrapping
-            //
-        });
-        */
-
-        // (logEntry.dst as any).put({
-            // x: 0,
-            // y: row,
-            // attr: {color: 'black', bgColor: 'green'}
-        // },
-            // 'X');
-        // (logEntry as any).moveTo(0, 0)
-        // (logEntry as any).x = 0;
-        // (logEntry as any).y = row;
-        // logEntry.draw();
         (logEntry as any).draw({
             dst: this.logPanel.getScreenBuffer(),
             x: 0,
@@ -134,16 +115,11 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
                 width: this.logPanel.calculatedWidth,
                 height: logEntry.getContentSize().height,
             },
-            // blending: true,
         });
-        // logEntry.dst.fill({attr: {color: 'black', bgColor: 'green'}});
-        // this.logPanel.buffer.fill({attr: {color: 'black', bgColor: 'green'}});
-        // this.logPanel.buffer.insert('TEST');
     }
 
     /** prints a single log entry at the end of the display */
     public appendLog(record: LogRecord, y: number) {
-        // TODO: so we need to figure out how many lines long the print will be BEFORE we start printing
     }
 
     /** prints the log at the bottom of the screen, and previous logs above. */
@@ -199,47 +175,6 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
 
         this.idxPanel.buffer.insert(idxStr, attr);
     }
-
-    /** 
-     * prints all the logs in the logs object
-     * Even though screenbuffer has its own implementation of scrolling, we don't use it, because screenbuffer also stores attr data for every line, which isn't reasonable for a large number of logs
-     */
-    /*
-    public print(scrollOffset: number): void {
-        // reset display
-        (this.logPanel.buffer as any).setText('');
-        (this.logPanel.buffer as any).moveTo(0, 0);
-
-        (this.idxPanel.buffer as any).setText('');
-        (this.idxPanel.buffer as any).moveTo(0, 0);
-        // this.logPanel.buffer.dst.clear();
-        // this.idxPanel.buffer.dst.clear();
-
-        // TODO: implement scrolling
-        const printOptions: LogDisplayPanel.PrintOptions = {
-            dst: this.logPanel.buffer,
-            matches: this.matches,
-            logLevelColors: this.logLevelColors,
-            expandedView: this.expandedView,
-            indentStr: ' '.repeat(4),
-        };
-        this.logs.forEach((record) => {
-            const linesPrinted = LogDisplayPanel.printLog(record, printOptions);
-            this.logPanel.buffer.newLine();
-
-            const idxStr = record.idx.toString();
-            // right align
-            // TODO: what happens if we overflow?
-            // leave 1 column gap
-            (this.idxPanel.buffer as any).move(this.idxPanel.options.width - idxStr.length - 1, 0);
-
-            this.idxPanel.buffer.insert(idxStr);
-            for(let i = 0; i < linesPrinted; i++) {
-                this.idxPanel.buffer.newLine();
-            }
-        });
-    }
-    */
 
     public static printLog(record: LogRecord, printOptions: LogDisplayPanel.PrintOptions): number {
         const messageColor = record.log && record.log.level?
