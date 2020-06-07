@@ -1,43 +1,43 @@
+import {Observable, concat} from 'rxjs';
+import {tap, count} from 'rxjs/operators';
+
 import { LogDb } from '../src/logdb';
 import { Parser } from '../src/query';
 
-const logs = [
-    {
-        level: 'info',
-        name: 'elliot',
-        a: 1,
-        b: 'two',
-        c: {
-            c1: 'c-c1',
-            c2: 'c-c2',
+// ((a, b) => a - b)
+function sortedUnion<T>(lhs: Array<T>, rhs: Array<T>, compareFn: (a: T, b: T) => number): Array<T> {
+    return Array.from(new Set([...lhs, ...rhs])).sort(compareFn);
+}
+
+function intersection<T>(lhs: Array<T>, rhs: Array<T>): Array<T> {
+    return lhs.filter((index) => rhs.includes(index));
+}
+
+function testQuery(query: string, logdb: LogDb, expected: number[]) {
+    test(query, () => {
+        const expectedMatches = new Set(expected);
+        console.log
+
+        const expr = parser.parse(query);
+        if(query === 'a:a b:b') {
+            console.log(expr);
         }
-    }, 
-    {
-        level: 'info',
-        name: 'elliot',
-        b: 't',
-    },
-    {
-        level: 'info',
-        name: 'noah',
-        b: 'tw',
-    },
-    {
-        level: 'info',
-        name: 'noah',
-        b: 'twixt',
-    },
-    {
-        level: 'info',
-        name: 'noah',
-        b: 'boot',
-    },
-    {
-        level: 'info',
-        name: 'noah',
-        b: 'shazam',
-    }
-];
+        expect(expr.length).toBe(1);
+        
+
+        return logdb.filterAll(expr[0]).pipe(
+            tap((match) => {
+                const idx = match.record.idx;
+                expect(expectedMatches.has(idx)).toBeTruthy();
+                expectedMatches.delete(idx);
+            }),
+            count(),
+            tap((c) => {
+                expect(c).toBe(expected.length);
+            })
+        ).toPromise();
+    });
+}
 
 let parser: Parser;
 
@@ -46,36 +46,69 @@ beforeEach(() => {
 });
 
 describe('logdb', () => {
-    test('filter', (done) => {
+    describe('filterAll', () => {
+        const logs = [
+            {a: 'b'},
+            {a: 'z'},
+            {b: 'a'},
+            {b: 'y'},
+        ];
         const logdb = new LogDb();
-        logs.forEach((log) => {
-            logdb.ingest(JSON.stringify(log));
+        const records = logs.map((log) => logdb.ingest(JSON.stringify(log)));
+
+        const expected: any = {
+            'a': [0, 1, 2],
+            'b': [0, 2, 3],
+            'z': [1],
+            'y': [3],
+
+            'a:': [0, 1],
+            'b:': [2, 3],
+            'z:': [],
+            'y:': [],
+
+            ':a': [2],
+            ':b': [0],
+            ':z': [1],
+            ':y': [3],
+
+            'a:a': [],
+            'a:b': [0],
+            'a:z': [1],
+            'a:y': [],
+
+            'b:a': [2],
+            'b:b': [],
+            'b:z': [],
+            'b:y': [3],
+        };
+
+        describe('query: MATCH', () => {
+            Object.keys(expected).forEach((query) => {
+                testQuery(query, logdb, expected[query]);
+            });
         });
 
-        /*
-        logdb.filter(parser.parse('tw')[0]).subscribe({
-            next: (results) => {
-                results.matches.forEach((match, logIdx) => {
-                    // expect(match)
+        describe('query: AND', () => {
+            const expectedAnd = [
+                ['a', 'a'],
+                ['a', 'b'],
+                ['a', 'z'],
+                ['a', 'y'],
 
-                    // console.log(logIdx);
-                    // console.log(match.property);
-                    // console.log(match.value);
-                });
-            },
-            complete: () => done(),
-            error: (error) => done(error)
+                ['a:a', 'b:b'],
+            ];
+
+            expectedAnd.forEach((queryParts) => {
+                testQuery(
+                    queryParts.join(' '),
+                    logdb, 
+                    queryParts.reduce((arr, q) => !arr?
+                        expected[q]:
+                        intersection(arr, expected[q])
+                    , undefined as number[] | undefined)!
+                );
+            });
         });
-        */
     });
-    // describe('filter', () => {
-        // queries.forEach(({input, expected}) => {
-            // test(input, () => {
-                // const parser = new Parser();
-                // const expr = parser.parse(input);
-                // expect(expr).toEqual(expected);
-            // });
-        // });
-    // });
 });
-

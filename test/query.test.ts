@@ -99,6 +99,30 @@ const queries: Array<{input: string, expected: Parse.Expression[]}> = [{
             expr: valueExpr('error'),
         },
     }],
+}, {
+    input: 'error warn',
+    expected: [{
+        eType: 'AND',
+        lhs: valueExpr('error'),
+        rhs: valueExpr('warn'),
+    }]
+}, {
+    input: 'level:error level:warn',
+    expected: [{
+        eType: 'AND',
+        lhs: {
+            eType: 'MATCH',
+            mType: 'FULL',
+            property: valueExpr('level'),
+            value: valueExpr('error'),
+        },
+        rhs: {
+            eType: 'MATCH',
+            mType: 'FULL',
+            property: valueExpr('level'),
+            value: valueExpr('warn'),
+        }
+    }]
 }];
 
 beforeEach(() => {
