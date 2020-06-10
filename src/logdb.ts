@@ -520,16 +520,16 @@ export class LogDb {
                 };
 
                 if(matchQuery.mType === 'FULL') {
-                    const searchProperty = matchQuery.value.eType === 'VALUE'?
-                        matchQuery.value.value:
-                        matchQuery.value.expr.value;
+                    const searchProperty = matchQuery.property.eType === 'VALUE'?
+                        matchQuery.property.value:
+                        matchQuery.property.expr.value;
 
                     let propertyMatch = fuzzysort.single(searchProperty, property);
                     if(!propertyMatch || propertyMatch.score < this.fuzzysortThreshold) {
                         propertyMatch = null;
                     }
 
-                    if(matchQuery.value.eType === 'EXCLUDE') {
+                    if(matchQuery.property.eType === 'EXCLUDE') {
                         if(propertyMatch) {
                             // no match
                             continue;
@@ -553,27 +553,27 @@ export class LogDb {
         for(let property of record.index.properties.values()) {
             const propertyMatch = fuzzysort.single((matchQuery.property as Parse.Expression.EXCLUDE).expr.value, property);
             if(propertyMatch && propertyMatch.score >= this.fuzzysortThreshold) {
-                return [{
-                    logRecord: record,
-                }];
+                return [];
             }
         }
 
-        return [];
+        return [{
+            logRecord: record,
+        }];
     }
 
     /** return an empty match if the log matches the value */
     public matchExcludeValue(matchQuery: Parse.Expression.MATCH.VALUE_MATCH, record: LogRecord): ResultSet.Match[] {
-        for(let [value, properties] of record.index.properties.values()) {
+        for(let [value, propertySet] of record.index.values.entries()) {
             const valueMatch = fuzzysort.single((matchQuery.value as Parse.Expression.EXCLUDE).expr.value, value);
             if(valueMatch && valueMatch.score >= this.fuzzysortThreshold) {
-                return [{
-                    logRecord: record,
-                }];
+                return [];
             }
         }
 
-        return [];
+        return [{
+            logRecord: record,
+        }];
     }
 
     public filterAll(query: Parse.Expression): Observable<FilterMatch> {

@@ -215,6 +215,9 @@ export class Parser {
         this.stack = [];
     }
 
+    /** returns the parsed expression.
+     * if the array contains more than one entry, the parser
+     * was provided an incomplete expression */
     public parse(query: string): Parse.Expression[] {
         this.stack = [];
 
@@ -346,6 +349,13 @@ export class Parser {
                 }
 
                 let rhs = this.nextExpression();
+                if(rhs && (rhs.eType === 'VALUE')) {
+                    // see if the value is part of a larger expression
+                    const rhsNext = this.nextExpression();
+                    if(rhsNext && rhsNext.eType === 'MATCH') {
+                        rhs = rhsNext;
+                    }
+                }
                 if(rhs && (rhs.eType === 'VALUE' || rhs.eType === 'MATCH')) {
                     this.stack.pop();
                 }

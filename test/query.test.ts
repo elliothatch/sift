@@ -123,6 +123,54 @@ const queries: Array<{input: string, expected: Parse.Expression[]}> = [{
             value: valueExpr('warn'),
         }
     }]
+}, {
+    input: '!error',
+    expected: [{
+        eType: 'EXCLUDE',
+        expr: valueExpr('error'),
+    }]
+}, {
+    input: '!level:',
+    expected: [{
+        eType: 'MATCH',
+        mType: 'PROPERTY',
+        property: {
+            eType: 'EXCLUDE',
+            expr: valueExpr('level'),
+        }
+    }],
+}, {
+    input: ':!error',
+    expected: [{
+        eType: 'MATCH',
+        mType: 'VALUE',
+        value: {
+            eType: 'EXCLUDE',
+            expr: valueExpr('error'),
+        }
+    }],
+}, {
+    input: '!level:error',
+    expected: [{
+        eType: 'MATCH',
+        mType: 'FULL',
+        property: {
+            eType: 'EXCLUDE',
+            expr: valueExpr('level'),
+        },
+        value: valueExpr('error'),
+    }],
+}, {
+    input: 'level:!error',
+    expected: [{
+        eType: 'MATCH',
+        mType: 'FULL',
+        property: valueExpr('level'),
+        value: {
+            eType: 'EXCLUDE',
+            expr: valueExpr('error'),
+        }
+    }],
 }];
 
 beforeEach(() => {
@@ -140,3 +188,6 @@ describe('query', () => {
     });
 });
 
+//TODO: expand tests with variety of inputs, structured data, duplicate logs, different data types
+
+//TODO: add structured lookup tests/dot (.) operator

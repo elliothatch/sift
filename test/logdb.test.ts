@@ -1,11 +1,11 @@
 import {Observable, concat} from 'rxjs';
-import {tap, count} from 'rxjs/operators';
+import {toArray, tap, count} from 'rxjs/operators';
 
 import { LogDb } from '../src/logdb';
 import { Parser } from '../src/query';
 
 // ((a, b) => a - b)
-function sortedUnion<T>(lhs: Array<T>, rhs: Array<T>, compareFn: (a: T, b: T) => number): Array<T> {
+function sortedUnion<T>(lhs: Array<T>, rhs: Array<T>, compareFn?: (a: T, b: T) => number): Array<T> {
     return Array.from(new Set([...lhs, ...rhs])).sort(compareFn);
 }
 
@@ -16,24 +16,16 @@ function intersection<T>(lhs: Array<T>, rhs: Array<T>): Array<T> {
 function testQuery(query: string, logdb: LogDb, expected: number[]) {
     test(query, () => {
         const expectedMatches = new Set(expected);
-        console.log
 
         const expr = parser.parse(query);
-        if(query === 'a:a b:b') {
-            console.log(expr);
-        }
         expect(expr.length).toBe(1);
         
 
         return logdb.filterAll(expr[0]).pipe(
-            tap((match) => {
-                const idx = match.record.idx;
-                expect(expectedMatches.has(idx)).toBeTruthy();
-                expectedMatches.delete(idx);
-            }),
-            count(),
-            tap((c) => {
-                expect(c).toBe(expected.length);
+            toArray(),
+            tap((results) => {
+                const resultIdxs = results.map((result) => result.record.idx).sort((a, b) => a - b);
+                expect(resultIdxs).toEqual(expected);
             })
         ).toPromise();
     });
@@ -90,7 +82,7 @@ describe('logdb', () => {
         });
 
         describe('query: AND', () => {
-            const expectedAnd = [
+            const andQueries = [
                 ['a', 'a'],
                 ['a', 'b'],
                 ['a', 'z'],
@@ -99,7 +91,7 @@ describe('logdb', () => {
                 ['a:a', 'b:b'],
             ];
 
-            expectedAnd.forEach((queryParts) => {
+            andQueries.forEach((queryParts) => {
                 testQuery(
                     queryParts.join(' '),
                     logdb, 
@@ -110,5 +102,73 @@ describe('logdb', () => {
                 );
             });
         });
+
+        describe('query: OR', () => {
+            const orQueries = [
+                ['a', 'a'],
+                ['a', 'b'],
+                ['a', 'z'],
+                ['a', 'y'],
+
+                ['a:a', 'b:b'],
+            ];
+
+            orQueries.forEach((queryParts) => {
+                testQuery(
+                    queryParts.join(','),
+                    logdb, 
+                    queryParts.reduce((arr, q) => !arr?
+                        expected[q]:
+                        sortedUnion(arr, expected[q], (a, b) => a - b)
+                    , undefined as number[] | undefined)!
+                );
+            });
+        });
+
+        const excludeExpected: any = {
+            '!a': [3],
+            '!b': [1],
+            '!z': [0, 2, 3],
+            '!y': [0, 1, 2],
+
+            '!a:': [2, 3],
+            '!b:': [0, 1],
+            '!z:': [0, 1, 2, 3],
+            '!y:': [0, 1, 2, 3],
+
+            ':!a': [0, 1, 3],
+            ':!b': [1, 2, 3],
+            ':!z': [0, 2, 3],
+            ':!y': [0, 1, 2],
+
+            '!a:a': [2],
+            '!a:b': [],
+            '!a:z': [],
+            '!a:y': [3],
+
+            '!b:a': [],
+            '!b:b': [0],
+            '!b:z': [1],
+            '!b:y': [],
+
+            'a:!a': [0, 1],
+            'a:!b': [1],
+            'a:!z': [0],
+            'a:!y': [0, 1],
+
+            'b:!a': [3],
+            'b:!b': [2, 3],
+            'b:!z': [2, 3],
+            'b:!y': [2],
+        };
+
+        describe('query: EXCLUDE', () => {
+            Object.keys(excludeExpected).forEach((query) => {
+                testQuery(query, logdb, excludeExpected[query]);
+            });
+        });
+
+        //TODO: expand tests with variety of inputs, structured data, duplicate logs, different data types
+        //TODO: add structured lookup tests/dot (.) operator
     });
 });
