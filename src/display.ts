@@ -12,6 +12,7 @@ export class Display {
     public logDisplayPanel: LogDisplayPanel;
     public statusBar: ScreenPanel;
     public queryResults: TextPanel;
+    public fuzzyThreshold: TextPanel;
     public processPanel: ScreenPanel;
     public queryBar: ScreenPanel;
     public queryPanel: TextPanel;
@@ -23,6 +24,7 @@ export class Display {
             name: 'root',
             width: this.terminal.width,
             height: this.terminal.height,
+            drawCursor: true,
         });
 
         this.logPanel = new ScreenPanel(this.rootPanel.buffer, {
@@ -70,10 +72,18 @@ export class Display {
 
         this.queryResults = new TextPanel(this.rootPanel.buffer, {
             name: 'queryresults',
-            width: 20,
+            width: 1,
             height: 1,
+            flex: { width: true}
         });
         this.statusBar.addChild(this.queryResults);
+
+        this.fuzzyThreshold = new TextPanel(this.rootPanel.buffer, {
+            name: 'fuzzythreshold',
+            width: 2,
+            height: 1,
+        });
+        this.statusBar.addChild(this.fuzzyThreshold);
 
         this.processPanel = new ScreenPanel(this.rootPanel.buffer, {
             name: 'processes',
@@ -88,7 +98,8 @@ export class Display {
             width: 1,
             height: 1,
             flex: { width: true },
-            flexCol: true
+            flexCol: true,
+            drawCursor: true
         });
         this.rootPanel.addChild(this.queryBar);
         const queryPromptPanel = new ScreenPanel(this.rootPanel.buffer, {

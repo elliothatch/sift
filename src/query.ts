@@ -19,18 +19,19 @@ export interface TokenDefinition {
     pattern: RegExp;
 }
 const tokenDefinitions: TokenDefinition[] = [{
-    tType: 'UNDEFINED',
-    pattern: /undefined/y,
-}, {
-    tType: 'NULL',
-    pattern: /null/y,
-}, {
-    tType: 'BOOLEAN',
-    pattern: /(true)|(false)/y,
-}, {
-    tType: 'QUOTED_STR',
-    pattern: /".*"/y,
+    // tType: 'UNDEFINED',
+    // pattern: /undefined/y,
 // }, {
+    // tType: 'NULL',
+    // pattern: /null/y,
+// }, {
+    // tType: 'BOOLEAN',
+    // pattern: /(true)|(false)/y,
+// }, {
+    // TODO: BUG: the lexer is greedy and will match too much if the query contains more than one pair of quotation marks. may just have to adjust which regex match is returned
+    tType: 'QUOTED_STR',
+    pattern: /\".*\"/y,
+}, {
     // tType: 'NUMBER',
     // pattern: /[+-]?\d+(\.\d+)?/y,
     /*
@@ -44,19 +45,19 @@ const tokenDefinitions: TokenDefinition[] = [{
     tType: 'OBJECT_END',
     pattern: /}/y,
     */
-}, {
-    tType: 'LESS_THAN_EQ',
-    pattern: /<=/y,
-}, {
-    tType: 'GREATER_THAN_EQ',
-    pattern: />=/y,
-}, {
-    tType: 'LESS_THAN',
-    pattern: /</y,
-}, {
-    tType: 'GREATER_THAN',
-    pattern: />/y,
-}, {
+// }, {
+//     tType: 'LESS_THAN_EQ',
+//     pattern: /<=/y,
+// }, {
+//     tType: 'GREATER_THAN_EQ',
+//     pattern: />=/y,
+// }, {
+//     tType: 'LESS_THAN',
+//     pattern: /</y,
+// }, {
+//     tType: 'GREATER_THAN',
+//     pattern: />/y,
+// }, {
     tType: 'AND',
     pattern: / /y,
 }, {
@@ -262,7 +263,7 @@ export class Parser {
             case 'QUOTED_STR':
                 return {
                     eType: 'VALUE',
-                    value: token.value.substring(1, -1),
+                    value: token.value.substring(1, token.value.length - 1),
                 };
             case 'NUMBER':
                 return {

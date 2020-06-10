@@ -247,13 +247,18 @@ export namespace ResultSet {
         logRecord: LogRecord;
         property?: {
             name: PropertyId;
-            fuzzyResult: Fuzzysort.Result;
+            fuzzyResult: FuzzyResult;
         }
         value?: {
             property: PropertyId;
             value: any;
-            fuzzyResult: Fuzzysort.Result;
+            fuzzyResult: FuzzyResult;
         }
+    }
+
+    export interface FuzzyResult {
+        indexes: number[];
+        score: number;
     }
 
     export function addMatch(match: Match, resultSet: ResultSet, skipIndex?: boolean): ResultSet {
@@ -456,14 +461,27 @@ export class LogDb {
             // search by property index
             const matches: ResultSet.Match[] = [];
             for(let property of record.index.properties.values()) {
-                const propertyMatch = fuzzysort.single((matchQuery.property as Parse.Expression.VALUE).value, property);
+                const searchProperty = (matchQuery.property as Parse.Expression.VALUE).value;
+                const propertyMatch = fuzzysort.single(searchProperty, property);
                 if(!propertyMatch || propertyMatch.score < this.fuzzysortThreshold) continue;
 
+                // TODO: match properties more precisely. fuzzy search means that we always match all the children of a property as well which isn't really what we want
+                // redo the match just with the final part so we only include highlight results for the exact property, and not all its parents
+                // const searchPropertyParts = searchProperty.split('.');
+                // const propertyParts = property.split('.');
+                // const propertyHighlightMatch = fuzzysort.single(searchPropertyParts[searchPropertyParts.length - 1], propertyParts[propertyParts.length - 1]);
+
+                // if(!propertyHighlightMatch || propertyHighlightMatch.score < this.fuzzysortThreshold) continue;
                 let match: ResultSet.Match = {
                     logRecord: record,
                     property: {
                         name: propertyMatch.target,
-                        fuzzyResult: propertyMatch,
+                        // copy the results so fuzzysort doesn't reuse the array and remove highlight data
+                        fuzzyResult: {
+                            indexes: propertyMatch.indexes.slice(),
+                            // indexes: propertyHighlightMatch.indexes.slice(),
+                            score: propertyMatch.score
+                        }
                     }
                 };
 
@@ -488,7 +506,11 @@ export class LogDb {
                         match.value = {
                             property: propertyMatch.target,
                             value,
-                            fuzzyResult: valueMatch,
+                            // copy the results so fuzzysort doesn't reuse the array and remove highlight data
+                            fuzzyResult: {
+                                indexes: valueMatch.indexes.slice(),
+                                score: valueMatch.score
+                            }
                         };
                     }
                     else {
@@ -515,7 +537,11 @@ export class LogDb {
                     value: {
                         property,
                         value: valueMatch.target,
-                        fuzzyResult: valueMatch,
+                        // copy the results so fuzzysort doesn't reuse the array and remove highlight data
+                        fuzzyResult: {
+                            indexes: valueMatch.indexes.slice(),
+                            score: valueMatch.score
+                        }
                     }
                 };
 
@@ -538,7 +564,11 @@ export class LogDb {
                     else if(propertyMatch) {
                         match.property = {
                             name: property,
-                            fuzzyResult: propertyMatch,
+                            // copy the results so fuzzysort doesn't reuse the array and remove highlight data
+                            fuzzyResult: {
+                                indexes: propertyMatch.indexes.slice(),
+                                score: propertyMatch.score
+                            }
                         };
                     }
                 }

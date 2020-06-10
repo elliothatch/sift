@@ -32,12 +32,29 @@ function createProcess(execPath: string, params: string[]): Process {
     };
 }
 
+if(process.argv.length <= 2) {
+    console.log('Usage: sift <exec> [...execParams]');
+    process.exit();
+}
+
+
 const display = new Display();
 display.init();
 
 const logdb = new LogDb();
 const parser = new Parser();
 
+
+{
+    const fuzzyThresholdStr = Math.log10(-logdb.fuzzysortThreshold).toString();
+    (display.fuzzyThreshold.buffer as any).setText('');
+    (display.fuzzyThreshold.buffer as any).moveTo(
+        display.fuzzyThreshold.calculatedWidth - fuzzyThresholdStr.length,
+        0
+    );
+    display.fuzzyThreshold.buffer.insert(fuzzyThresholdStr);
+    display.fuzzyThreshold.draw();
+}
 
 let cursorPause = -1;
 
@@ -83,10 +100,47 @@ display.terminal.on('key', (name: any, matches: any, data: any) => {
             cursorPause = -1;
             drawLogs();
         }
+
+        else if(name === 'LEFT') {
+            display.queryPanel.buffer.moveBackward(false);
+            display.queryPanel.draw();
+        }
+        else if(name === 'RIGHT') {
+            if((display.queryPanel.buffer as any).cx < display.queryPanel.buffer.getText().length) {
+                display.queryPanel.buffer.moveForward(false);
+                display.queryPanel.draw();
+            }
+        }
 		else if(name === 'ESCAPE') {
-			display.queryPanel.buffer.backDelete((display.queryPanel.buffer as any).cx);
+
+            (display.queryPanel.buffer as any).setText('');
+            (display.queryPanel.buffer as any).moveTo(0, 0);
 			display.queryPanel.draw();
 			onQueryChanged();
+        }
+        else if(name === 'PAGE_UP') {
+            logdb.fuzzysortThreshold = Math.floor(logdb.fuzzysortThreshold * 10);
+            const fuzzyThresholdStr = Math.log10(-logdb.fuzzysortThreshold).toString();
+			(display.fuzzyThreshold.buffer as any).setText('');
+			(display.fuzzyThreshold.buffer as any).moveTo(
+			    display.fuzzyThreshold.calculatedWidth - fuzzyThresholdStr.length,
+			    0
+			);
+            display.fuzzyThreshold.buffer.insert(fuzzyThresholdStr);
+            display.fuzzyThreshold.draw();
+            onQueryChanged();
+        }
+        else if(name === 'PAGE_DOWN') {
+            logdb.fuzzysortThreshold = Math.min(-1, logdb.fuzzysortThreshold / 10);
+            const fuzzyThresholdStr = Math.log10(-logdb.fuzzysortThreshold).toString();
+			(display.fuzzyThreshold.buffer as any).setText('');
+			(display.fuzzyThreshold.buffer as any).moveTo(
+			    display.fuzzyThreshold.calculatedWidth - fuzzyThresholdStr.length,
+			    0
+			);
+            display.fuzzyThreshold.buffer.insert(fuzzyThresholdStr);
+            display.fuzzyThreshold.draw();
+            onQueryChanged();
         }
         else if(data.isCharacter) {
             display.queryPanel.buffer.insert(name);
@@ -111,13 +165,11 @@ let expr: Parse.Expression[] = [];
 const logDisplayPanel = display.logDisplayPanel;
 logDisplayPanel.logs = logdb.logs;
 
-const testProcess = process.argv.length <= 2?
-    createProcess('node', [Path.join(__dirname, '..', '..', 'scripts', 'dev.test.js')]):
-    createProcess(process.argv[2], process.argv.slice(3));
+const targetProcess = createProcess(process.argv[2], process.argv.slice(3));
 
 merge(
-    fromEvent<string>(testProcess.stdoutInterface, 'line').pipe(map((line) => logdb.ingest(line))),
-    fromEvent<string>(testProcess.stderrInterface, 'line').pipe(map((line) => logdb.ingest(line, 'error'))),
+    fromEvent<string>(targetProcess.stdoutInterface, 'line').pipe(map((line) => logdb.ingest(line))),
+    fromEvent<string>(targetProcess.stderrInterface, 'line').pipe(map((line) => logdb.ingest(line, 'error'))),
 ).pipe(
     // true return = redraw
     tap((record) => {

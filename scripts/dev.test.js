@@ -56,6 +56,7 @@ function generateRandomArray(items) {
 			entryId: randomString(12),
 		});
 	}
+	return arr;
 }
 
 rxjs.timer(0, logDelay).subscribe((x) => {

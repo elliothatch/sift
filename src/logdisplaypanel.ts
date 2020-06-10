@@ -204,7 +204,7 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
             const expandedLog = Object.assign({}, record.log);
             delete expandedLog.level;
             delete expandedLog.message;
-            delete expandedLog.pid;
+            // delete expandedLog.pid;
             delete expandedLog.timestamp;
 
             printOptions.dst.newLine();
@@ -232,13 +232,12 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
             return [];
         }
 
-        const valueMatch = logMatch.value.find((match) => match.value && match.value.property === property);
+        const valueMatches = logMatch.value.filter((match) => match.value && match.value.property === property);
 
-        if(!valueMatch) {
-            return [];
-        }
-
-        return valueMatch.value!.fuzzyResult.indexes;
+        return valueMatches.reduce((arr, valueMatch) => {
+            arr.push(...valueMatch.value!.fuzzyResult.indexes);
+            return arr;
+        }, [] as number[]);
     }
 
     public static printJson(record: LogRecord, obj: any, printOptions: LogDisplayPanel.PrintOptions, propertyPath?: Array<string | number>): number {
@@ -332,7 +331,7 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
                 if(logMatch) {
                     const propertyMatch = logMatch.property.find((match) => match.property && match.property.name === propertyId);
                     if(propertyMatch) {
-                        highlightIndexes = propertyMatch.property!.fuzzyResult.indexes;
+                        highlightIndexes = propertyMatch.property!.fuzzyResult.indexes.map((i) => i - propertyPrefix.length).filter((i) => i >= 0);
                     }
                 }
                 LogDisplayPanel.printHighlightedText(property, printOptions.dst, highlightIndexes, attr, highlightPropertyAttr);
