@@ -1,43 +1,50 @@
 {
-  "name": "sift-cli",
-  "version": "1.0.1",
-  "description": "Search and filter structured logs interactively in the terminal",
-  "license": "MIT",
-  "author": {
-    "name": "Elliot Hatch",
-    "email": "elliot.hatch@gmail.com"
-  },
-  "bin": {
-    "sift": "./sift.js"
-  },
-  "main": "build/index.js",
-  "types": "declarations/index.d.ts",
-  "files": [
-    "sift.js",
-    "build/",
-    "declarations/"
-  ],
-  "scripts": {
-    "build": "node node_modules/.bin/tsc",
-    "clean": "rm -R build/ && rm -R declarations",
-    "start": "node --enable-source-maps build/index.js",
-    "dev": "node --enable-source-maps build/index.js scripts/dev.test.js",
-    "debug": "node --enable-source-maps --inspect-brk build/index.js",
-    "test": "node_modules/jest/bin/jest.js --coverage --verbose",
-    "profile": "node --prof build/index.js"
-  },
-  "devDependencies": {
-    "@types/jest": "^25.2.1",
-    "@types/node": "^13.9.2",
-    "freshlog": "^0.2.4",
-    "jest": "^25.2.4",
-    "ts-jest": "^25.3.1",
-    "typescript": "^3.8.3"
-  },
-  "dependencies": {
-    "colors": "^1.4.0",
-    "fuzzysort": "^1.1.4",
-    "rxjs": "^6.5.5",
-    "terminal-kit": "^1.35.2"
-  }
+	"name": "sift-cli",
+	"version": "1.0.2",
+	"description": "Search and filter structured logs interactively in the terminal",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/elliothatch/sift"
+	},
+	"bugs": {
+		"url": "https://github.com/elliothatch/sift/issues"
+	},
+	"license": "MIT",
+	"author": {
+		"name": "Elliot Hatch",
+		"email": "elliot.hatch@gmail.com"
+	},
+	"bin": {
+		"sift": "./sift.js"
+	},
+	"main": "build/index.js",
+	"types": "declarations/index.d.ts",
+	"files": [
+		"sift.js",
+		"build/",
+		"declarations/"
+	],
+	"scripts": {
+		"build": "node node_modules/.bin/tsc",
+		"clean": "rm -R build/ && rm -R declarations",
+		"start": "node --enable-source-maps build/index.js",
+		"dev": "node --enable-source-maps build/index.js scripts/dev.test.js",
+		"debug": "node --enable-source-maps --inspect-brk build/index.js",
+		"test": "node_modules/jest/bin/jest.js --coverage --verbose",
+		"profile": "node --prof build/index.js"
+	},
+	"devDependencies": {
+		"@types/jest": "^25.2.1",
+		"@types/node": "^13.9.2",
+		"freshlog": "^0.2.4",
+		"jest": "^25.2.4",
+		"ts-jest": "^25.3.1",
+		"typescript": "^3.8.3"
+	},
+	"dependencies": {
+		"colors": "^1.4.0",
+		"fuzzysort": "^1.1.4",
+		"rxjs": "^6.5.5",
+		"terminal-kit": "^1.35.2"
+	}
 }
