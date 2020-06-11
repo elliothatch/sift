@@ -164,7 +164,11 @@ yarn test
 
 # publish
 ```bash
+yarn clean
+yarn build
+yarn test
 yarn version
+# push changes
 yarn publish
 ```
 
