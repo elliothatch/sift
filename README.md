@@ -1,5 +1,5 @@
 # sift
-## Search and filter structured logs in the terminal
+## Search and filter structured logs interactively in the terminal
 
 Sift is a NodeJs command-line tool that provides an interactive interface for viewing and searching structured log data.  
 
@@ -129,7 +129,7 @@ Sift is in very early development, and could be improved by the addition of seve
  - Log parsing: Support well known log formats. Provide a mechanism to easily add custom parsers through a config file. E.g. nginx log format.
  - Data type awareness: Support the ability to search for values of a given type, and add operators for filtering these data types (e.g. numeric comparison, array operations)
  - Panel display: View multiple queries or streams at once with split window panels. A lot of the UI work is already done for this feature.
- - UI/UX improvements: Support scrolling within large log entries, jump to log, fast and precise scrolling, etc.
+ - UI/UX improvements: Support scrolling within large log entries, jump to log, fast and precise scrolling, help/instructions screen, etc.
  - Process control: Pause, interrupt, and attach to processes. Spawn one or more processes interactively. Combine or separate the output from one or more processes into controlled streams.
  - Advanced query management: Add, remove, and toggle custom queries, which are combiend with the user's typed query. E.g. always ignore the `timestamp` property in searches, interactively build complex queries as multiple separate queries whose outputs can be independently analyzed.
  - Custom formatting: Support custom formatting and coloring for "simple" and "expanded" log views.
@@ -160,6 +160,12 @@ yarn dev
 # test
 ```bash
 yarn test
+```
+
+# publish
+```bash
+yarn version
+yarn publish
 ```
 
 See package.json for more scripts.

@@ -6,7 +6,6 @@ import { Worker, isMainThread, parentPort, workerData } from 'worker_threads';
 
 import { of, EMPTY, concat, merge, fromEvent, race, Subscription, interval, Subject } from 'rxjs';
 import { mergeMap, map, skip, tap, debounceTime, auditTime, publish, filter, take, takeUntil, delay } from 'rxjs/operators';
-import { SkipList } from 'dsjslib';
 
 import { Display } from './display';
 import { Panel } from './panel';
