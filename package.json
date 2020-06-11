@@ -1,6 +1,6 @@
 {
 	"name": "sift-cli",
-	"version": "1.0.2",
+	"version": "1.0.3",
 	"description": "Search and filter structured logs interactively in the terminal",
 	"repository": {
 		"type": "git",
@@ -42,7 +42,6 @@
 		"typescript": "^3.8.3"
 	},
 	"dependencies": {
-		"colors": "^1.4.0",
 		"fuzzysort": "^1.1.4",
 		"rxjs": "^6.5.5",
 		"terminal-kit": "^1.35.2"

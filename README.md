@@ -3,6 +3,8 @@
 
 Sift is a NodeJs command-line tool that provides an interactive interface for viewing and searching structured log data.  
 
+![Sift demonstration](images/demo.gif)
+
 # install
 ```
 npm install -g sift-cli
@@ -123,6 +125,7 @@ The `timestamp`, `level`, and `message` fields are not displayed in the expanded
 # known issues
  - Objects in arrays are not indexed.
  - Queries with more than one pair of quotation marks don't work as intended.
+ - Queries with more more than one binary operator (AND/OR) don't work properly.
 
 # roadmap
 Sift is in very early development, and could be improved by the addition of several features:
