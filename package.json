@@ -1,6 +1,6 @@
 {
 	"name": "sift-cli",
-	"version": "1.0.3",
+	"version": "1.0.4",
 	"description": "Search and filter structured logs interactively in the terminal",
 	"repository": {
 		"type": "git",
