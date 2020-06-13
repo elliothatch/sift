@@ -170,5 +170,6 @@ describe('logdb', () => {
 
         //TODO: expand tests with variety of inputs, structured data, duplicate logs, different data types
         //TODO: add structured lookup tests/dot (.) operator
+        //TODO: add tests with multiple AND/OR operators
     });
 });

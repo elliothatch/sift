@@ -40,6 +40,17 @@ const queries: Array<{input: string, expected: Parse.Expression[]}> = [{
         rhs: valueExpr('warn'),
     }],
 }, {
+    input: 'error,warn,info',
+    expected: [{
+        eType: 'OR',
+        lhs: valueExpr('error'),
+        rhs: {
+            eType: 'OR',
+            lhs: valueExpr('warn'),
+            rhs: valueExpr('info'),
+        }
+    }]
+}, {
     input: 'level:error,warn',
     expected: [{
         eType: 'OR',
@@ -107,6 +118,32 @@ const queries: Array<{input: string, expected: Parse.Expression[]}> = [{
         rhs: valueExpr('warn'),
     }]
 }, {
+    input: 'error warn info',
+    expected: [{
+        eType: 'AND',
+        lhs: valueExpr('error'),
+        rhs: {
+            eType: 'AND',
+            lhs: valueExpr('warn'),
+            rhs: valueExpr('info'),
+        }
+    }]
+}, {
+    input: 'error warn,info trace',
+    expected: [{
+        eType: 'OR',
+        lhs: {
+            eType: 'AND',
+            lhs: valueExpr('error'),
+            rhs: valueExpr('warn'),
+        },
+        rhs: {
+            eType: 'AND',
+            lhs: valueExpr('info'),
+            rhs: valueExpr('trace'),
+        }
+    }]
+}, {
     input: 'level:error level:warn',
     expected: [{
         eType: 'AND',
@@ -121,6 +158,67 @@ const queries: Array<{input: string, expected: Parse.Expression[]}> = [{
             mType: 'FULL',
             property: valueExpr('level'),
             value: valueExpr('warn'),
+        }
+    }]
+}, {
+    input: 'level:error level:warn level:info',
+    expected: [{
+        eType: 'AND',
+        lhs: {
+            eType: 'MATCH',
+            mType: 'FULL',
+            property: valueExpr('level'),
+            value: valueExpr('error'),
+        },
+        rhs: {
+            eType: 'AND',
+            lhs: {
+                eType: 'MATCH',
+                mType: 'FULL',
+                property: valueExpr('level'),
+                value: valueExpr('warn'),
+            },
+            rhs: {
+                eType: 'MATCH',
+                mType: 'FULL',
+                property: valueExpr('level'),
+                value: valueExpr('info'),
+            }
+        }
+    }]
+}, {
+    input: 'level:error level:warn,data:info data:trace',
+    expected: [{
+        eType: 'OR',
+        lhs: {
+            eType: 'AND',
+            lhs: {
+                eType: 'MATCH',
+                mType: 'FULL',
+                property: valueExpr('level'),
+                value: valueExpr('error'),
+            },
+            rhs: {
+                eType: 'MATCH',
+                mType: 'FULL',
+                property: valueExpr('level'),
+                value: valueExpr('warn'),
+            },
+        },
+        rhs: {
+            eType: 'AND',
+            lhs: {
+                eType: 'MATCH',
+                mType: 'FULL',
+                property: valueExpr('data'),
+                value: valueExpr('info'),
+            },
+            rhs: {
+                eType: 'MATCH',
+                mType: 'FULL',
+                property: valueExpr('data'),
+                value: valueExpr('trace'),
+            }
         }
     }]
 }, {
@@ -172,9 +270,6 @@ const queries: Array<{input: string, expected: Parse.Expression[]}> = [{
         }
     }],
 }];
-
-beforeEach(() => {
-});
 
 describe('query', () => {
     describe('parser', () => {

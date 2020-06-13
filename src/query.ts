@@ -87,8 +87,6 @@ export function* Lexer(query: string) {
         for(const rule of tokenDefinitions) {
             rule.pattern.lastIndex = charIdx;
             const matches = rule.pattern.exec(query);
-            if(matches) {
-            }
             if(matches && matches.index == charIdx) {
                 charIdx = matches.index + matches[0].length;
                 token = {
@@ -193,13 +191,13 @@ export namespace Parse {
         }
         export interface AND {
             eType: 'AND';
-            lhs?: MATCH | VALUE;
-            rhs?: MATCH | VALUE;
+            lhs?: Expression;
+            rhs?: Expression;
         }
         export interface OR {
             eType: 'OR';
-            lhs?: MATCH | VALUE;
-            rhs?: MATCH | VALUE;
+            lhs?: Expression;
+            rhs?: Expression;
         }
         export interface EXCLUDE {
             eType: 'EXCLUDE';
@@ -238,11 +236,14 @@ export class Parser {
         }
 
         const expr = this.parseExpression(token.value);
-        this.stack.push(expr);
+        if(expr) {
+            this.stack.push(expr);
+        }
+
         return expr;
     }
 
-    public parseExpression(token: Token): Parse.Expression {
+    public parseExpression(token: Token): Parse.Expression | undefined {
         switch(token.tType) {
             /** literal string, surrounded by quotation marks */
             case 'UNDEFINED':
@@ -340,29 +341,32 @@ export class Parser {
             }
             case 'AND':
             case 'OR': {
-                let lhs: Parse.Expression.VALUE | Parse.Expression.MATCH | undefined;
+                let lhs: Parse.Expression | undefined;
                 if(this.stack.length > 0) {
                     let prevExpr = this.stack[this.stack.length - 1];
-                    if(prevExpr.eType === 'VALUE' || prevExpr.eType === 'MATCH') {
-                        lhs = prevExpr;
-                        this.stack.pop();
-                    }
-                }
-
-                let rhs = this.nextExpression();
-                if(rhs && (rhs.eType === 'VALUE')) {
-                    // see if the value is part of a larger expression
-                    const rhsNext = this.nextExpression();
-                    if(rhsNext && rhsNext.eType === 'MATCH') {
-                        rhs = rhsNext;
-                    }
-                }
-                if(rhs && (rhs.eType === 'VALUE' || rhs.eType === 'MATCH')) {
+                    lhs = prevExpr;
                     this.stack.pop();
                 }
-                else {
-                    rhs = undefined;
+
+                let nextExpr: Parse.Expression | undefined = this.nextExpression();
+
+                while(nextExpr) {
+                    if(token.tType === 'AND' && nextExpr.eType === 'OR') {
+                        // reorder AST into dijunctive form (OR of ANDS)
+                        const result = {
+                            eType: token.tType,
+                            lhs,
+                            rhs: nextExpr.lhs
+                        };
+
+                        nextExpr.lhs = result;
+                        // return undefined so this isn't added to the stack
+                        return undefined;
+                    }
+                    nextExpr = this.nextExpression();
                 }
+
+                const rhs  = this.stack.pop()
 
                 return {
                     eType: token.tType,

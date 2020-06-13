@@ -91,8 +91,9 @@ Non-string datatypes are interpreted as strings during the filtering process.
 ### operators
 More complex queries can be created with unary and binary operators.
 
- - `,` (comma): Logical OR. Example: `error,warn`
  - ` ` (space): Logical AND. Example: `error critical`
+ - `,` (comma): Logical OR. Example: `error,warn`
+ - The AND operator (space) takes precedence over the OR operator (comma), meaning queries are always written in disjunctive normal form. Example: `error critical,status failed` means `(error && critical) || (status && failed)`.
  - `!` (exclamation point): Exclude
    - `!key:value:`: matches objects with "value", excluding values associated with "key". Example: `!timestamp:2020` returns logs with a value matching `2020` only if the property for that value does not match `timestamp`.
    - `key:!value:`: matches objects with "key" property, if the value of "key" doesn't match "value". Example: `error:!connection` returns logs with a property matching `error` only if the value associated with that property does not match `connection`.
@@ -125,7 +126,6 @@ The `timestamp`, `level`, and `message` fields are not displayed in the expanded
 # known issues
  - Objects in arrays are not indexed.
  - Queries with more than one pair of quotation marks don't work as intended.
- - Queries with more more than one binary operator (AND/OR) don't work properly.
 
 # roadmap
 Sift is in very early development, and could be improved by the addition of several features:
