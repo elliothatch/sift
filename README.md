@@ -42,7 +42,7 @@ Logs ingested from STDERR are always assigned the level `error`, and may overrid
 Logs are interactively fuzzy-filtered as you type your query.  
 Sift also recognizes the following keyboard commands:
 
- - `CTRL_C`: Exit Sift
+ - `CTRL_C`: Kill child process/Exit Sift
  - `TAB`: Toggle between compact and expanded views.
  - `ESCAPE`: Reset query.
  - `UP ARROW`: Pause autoscrolling/scroll up one entry.

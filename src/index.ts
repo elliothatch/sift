@@ -1,7 +1,7 @@
 import * as Path from 'path';
 import { createInterface, Interface } from 'readline';
 
-import { spawn, ChildProcessWithoutNullStreams } from 'child_process';
+import { spawn, ChildProcess } from 'child_process';
 import { Worker, isMainThread, parentPort, workerData } from 'worker_threads';
 
 import { of, EMPTY, concat, merge, fromEvent, race, Subscription, interval, Subject } from 'rxjs';
@@ -15,7 +15,7 @@ import { Parse, Parser } from './query';
 const exitLogs: Array<{level?: string, message: any}> = [];
 
 interface Process {
-    process: ChildProcessWithoutNullStreams;
+    process: ChildProcess;
     running: boolean;
     stdoutInterface: Interface;
     stderrInterface: Interface;
@@ -60,12 +60,13 @@ let cursorPause = -1;
 display.terminal.on('key', (name: any, matches: any, data: any) => {
 	try {
 		if(name === 'CTRL_C') {
-			// if(process.running) {
-				// freshr.kill();
-			// }
-			// else {
-			// }
-			close();
+			if(targetProcess.running) {
+                logdb.ingest(JSON.stringify({level: 'warn', message: `Sending SIGTERM to child process "${targetProcess.process.spawnfile}" (${targetProcess.process.pid})`}));
+			    targetProcess.process.kill();
+            }
+            else {
+                close();
+            }
         }
 		else if(name === 'BACKSPACE') {
 			display.queryPanel.buffer.backDelete(1);
@@ -165,6 +166,15 @@ const logDisplayPanel = display.logDisplayPanel;
 logDisplayPanel.logs = logdb.logs;
 
 const targetProcess = createProcess(process.argv[2], process.argv.slice(3));
+
+targetProcess.process.on('exit', (code, signal) => {
+    targetProcess.running = false;
+    // TODO: show these logs in a separate "sift messages" panel
+    logdb.ingest(JSON.stringify({level: 'warn', message: `Child process "${targetProcess.process.spawnfile}" (${targetProcess.process.pid}) exited with ${code != null? 'code "' + code + '"': 'signal "' + signal + '"'}`}));
+    logdb.ingest(JSON.stringify({level: 'info', message: `Press CTRL_C to close sift`}));
+    drawLogs();
+    drawQueryResult();
+});
 
 merge(
     fromEvent<string>(targetProcess.stdoutInterface, 'line').pipe(map((line) => logdb.ingest(line))),
@@ -334,6 +344,7 @@ function drawQueryResult() {
 
 function close() {
     display.terminal.fullscreen(false);
+    targetProcess.process.kill();
     exitLogs.forEach(({level, message}) => {
         if(level === 'error') {
             console.error(message);
