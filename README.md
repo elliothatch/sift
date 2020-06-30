@@ -141,8 +141,10 @@ Sift is in very early development, and could be improved by the addition of seve
  - Configuration: Many built-in settings should be configurable from the command line or a configuration file.
 
 # changelog
- - 2020-06-30: Add SHIFT_UP/SHIFT_DOWN keyboard commands for paged scrolling
- - 2020-06-30: Include `npm-shrinkwrap.json` in published package, add package.json `shrinkwrap` script to generate npm-shrinkwrap from yarn.lock
+ - 1.0.6: Add SHIFT_UP/SHIFT_DOWN keyboard commands for paged scrolling
+ - 1.0.7: Include `npm-shrinkwrap.json` in published package, add package.json `shrinkwrap` script to generate npm-shrinkwrap from yarn.lock
+ - 1.0.8: Include `yarn.lock` in published package
+ - 1.0.9: Remove `yarn.lock` from published package since it is ignored. Fix terminal-kit version to `1.35.2`
 
 # development
 ## install

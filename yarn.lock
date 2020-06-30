@@ -3224,7 +3224,7 @@ synp@^1.7.0:
     nmtree "^1.0.3"
     request "^2.79.0"
 
-terminal-kit@^1.35.2:
+terminal-kit@1.35.2:
   version "1.35.2"
   resolved "https://registry.yarnpkg.com/terminal-kit/-/terminal-kit-1.35.2.tgz#62f9f4ac2e89a2c7e22c99a87d855410420553d9"
   integrity sha512-PCNmMKjlcGQN/OlQ+nzdgPmrS0kmPcOqPCmHPrxCfOuvz0fQ1fZLiyivRIcwzY9bnm624VVsywUis+iPA3Hq5A==

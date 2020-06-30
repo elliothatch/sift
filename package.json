@@ -1,6 +1,6 @@
 {
 	"name": "sift-cli",
-	"version": "1.0.8",
+	"version": "1.0.9",
 	"description": "Search and filter structured logs interactively in the terminal",
 	"repository": {
 		"type": "git",
@@ -23,8 +23,7 @@
 		"sift.js",
 		"build/",
 		"declarations/",
-		"npm-shrinkwrap.json",
-		"yarn.lock"
+		"npm-shrinkwrap.json"
 	],
 	"scripts": {
 		"build": "node node_modules/.bin/tsc",
@@ -48,6 +47,6 @@
 	"dependencies": {
 		"fuzzysort": "^1.1.4",
 		"rxjs": "^6.5.5",
-		"terminal-kit": "^1.35.2"
+		"terminal-kit": "1.35.2"
 	}
 }
