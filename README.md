@@ -46,7 +46,9 @@ Sift also recognizes the following keyboard commands:
  - `TAB`: Toggle between compact and expanded views.
  - `ESCAPE`: Reset query.
  - `UP ARROW`: Pause autoscrolling/scroll up one entry.
+ - `SHIFT_UP ARROW`: Pause autoscrolling/scroll up 20 entries.
  - `DOWN ARROW`: Jump to latest log and resume autoscrolling.
+ - `SHIFT_DOWN ARROW`: Pause autoscrolling/scroll down 20 entries.
  - `LEFT ARROW`: Move query cursor left.
  - `RIGHT ARROW`: Move query cursor right.
  - `PAGE UP`: Increase fuzzy match inclusivity (more results).
@@ -134,9 +136,12 @@ Sift is in very early development, and could be improved by the addition of seve
  - Panel display: View multiple queries or streams at once with split window panels. A lot of the UI work is already done for this feature.
  - UI/UX improvements: Support scrolling within large log entries, jump to log, fast and precise scrolling, help/instructions screen, etc.
  - Process control: Pause, interrupt, and attach to processes. Spawn one or more processes interactively. Combine or separate the output from one or more processes into controlled streams.
- - Advanced query management: Add, remove, and toggle custom queries, which are combiend with the user's typed query. E.g. always ignore the `timestamp` property in searches, interactively build complex queries as multiple separate queries whose outputs can be independently analyzed.
+ - Advanced query management: Add, remove, and toggle custom queries, which are combined with the user's typed query. E.g. always ignore the `timestamp` property in searches, interactively build complex queries as multiple separate queries whose outputs can be independently analyzed.
  - Custom formatting: Support custom formatting and coloring for "simple" and "expanded" log views.
  - Configuration: Many built-in settings should be configurable from the command line or a configuration file.
+
+# changelog
+ - 2020-06-30: Add SHIFT_UP/SHIFT_DOWN keyboard commands for paged scrolling
 
 # development
 ## install

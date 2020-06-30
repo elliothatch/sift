@@ -87,12 +87,30 @@ display.terminal.on('key', (name: any, matches: any, data: any) => {
             // display.logDisplayPanel.print(0);
             drawLogs();
         }
+        else if(name === 'SHIFT_UP') {
+            if(cursorPause < 0) {
+                cursorPause = display.logDisplayPanel.logs.length - 22;
+            }
+            else {
+                cursorPause = Math.max(0, cursorPause - 20);
+            }
+            drawLogs();
+        }
         else if(name === 'UP') {
             if(cursorPause < 0) {
                 cursorPause = display.logDisplayPanel.logs.length - 2;
             }
-            else if(cursorPause > 0) {
-                cursorPause--;
+            else {
+                cursorPause = Math.max(0, cursorPause - 1);
+            }
+            drawLogs();
+        }
+        else if(name === 'SHIFT_DOWN') {
+            if(cursorPause < 0) {
+                cursorPause = display.logDisplayPanel.logs.length - 1;
+            }
+            else {
+                cursorPause = Math.min(display.logDisplayPanel.logs.length - 1, cursorPause + 20);
             }
             drawLogs();
         }
@@ -100,7 +118,6 @@ display.terminal.on('key', (name: any, matches: any, data: any) => {
             cursorPause = -1;
             drawLogs();
         }
-
         else if(name === 'LEFT') {
             display.queryPanel.buffer.moveBackward(false);
             display.queryPanel.draw();
