@@ -142,6 +142,7 @@ Sift is in very early development, and could be improved by the addition of seve
 
 # changelog
  - 2020-06-30: Add SHIFT_UP/SHIFT_DOWN keyboard commands for paged scrolling
+ - 2020-06-30: Include `npm-shrinkwrap.json` in published package, add package.json `shrinkwrap` script to generate npm-shrinkwrap from yarn.lock
 
 # development
 ## install
@@ -175,6 +176,7 @@ yarn test
 yarn clean
 yarn build
 yarn test
+yarn shrinkwrap
 yarn version
 # push changes
 yarn publish

@@ -1,6 +1,6 @@
 {
 	"name": "sift-cli",
-	"version": "1.0.6",
+	"version": "1.0.7",
 	"description": "Search and filter structured logs interactively in the terminal",
 	"repository": {
 		"type": "git",
@@ -22,7 +22,8 @@
 	"files": [
 		"sift.js",
 		"build/",
-		"declarations/"
+		"declarations/",
+		"npm-shrinkwrap.json"
 	],
 	"scripts": {
 		"build": "node node_modules/.bin/tsc",
@@ -31,13 +32,15 @@
 		"dev": "node --enable-source-maps build/index.js scripts/dev.test.js",
 		"debug": "node --enable-source-maps --inspect-brk build/index.js",
 		"test": "node_modules/jest/bin/jest.js --coverage --verbose",
-		"profile": "node --prof build/index.js"
+		"profile": "node --prof build/index.js",
+		"shrinkwrap": "./node_modules/.bin/synp --source-file yarn.lock && npm shrinkwrap"
 	},
 	"devDependencies": {
 		"@types/jest": "^25.2.1",
 		"@types/node": "^13.9.2",
 		"freshlog": "^0.2.4",
 		"jest": "^25.2.4",
+		"synp": "^1.7.0",
 		"ts-jest": "^25.3.1",
 		"typescript": "^3.8.3"
 	},
