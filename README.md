@@ -44,15 +44,17 @@ Sift also recognizes the following keyboard commands:
 
  - `CTRL_C`: Kill child process/Exit Sift
  - `TAB`: Toggle between compact and expanded views.
- - `ESCAPE`: Reset query.
- - `UP ARROW`: Pause autoscrolling/scroll up one entry.
- - `SHIFT_UP ARROW`: Pause autoscrolling/scroll up 20 entries.
- - `DOWN ARROW`: Jump to latest log and resume autoscrolling.
- - `SHIFT_DOWN ARROW`: Pause autoscrolling/scroll down 20 entries.
  - `LEFT ARROW`: Move query cursor left.
  - `RIGHT ARROW`: Move query cursor right.
- - `PAGE UP`: Increase fuzzy match inclusivity (more results).
- - `PAGE DOWN`: Decrease fuzzy match inclusivity (fewer results).
+ - `ESCAPE`: Clear query.
+ - `UP ARROW`: Scroll up one entry. Pause autoscroll.
+ - `DOWN ARROW`: Scroll down one entry. Pause autoscroll.
+ - `PAGE_UP`: Scroll up 20 entries. Pause autoscroll.
+ - `PAGE_DOWN`: Scroll down 20 entries. Pause autoscroll.
+ - `HOME`: Jump to first entry. Pause autoscrscroll.
+ - `END`: Jump to last entry and *resume autoscroll*.
+ - `SHIFT_UP ARROW`: Increase fuzzy match inclusivity (more results).
+ - `SHIFT_DOWN ARROW`: Decrease fuzzy match inclusivity (fewer results).
 
 ## query language
 Sift uses a simple query language to find and filter JSON objects.
@@ -141,10 +143,12 @@ Sift is in very early development, and could be improved by the addition of seve
  - Configuration: Many built-in settings should be configurable from the command line or a configuration file.
 
 # changelog
- - 1.0.6: Add SHIFT_UP/SHIFT_DOWN keyboard commands for paged scrolling
- - 1.0.7: Include `npm-shrinkwrap.json` in published package, add package.json `shrinkwrap` script to generate npm-shrinkwrap from yarn.lock
- - 1.0.8: Include `yarn.lock` in published package
+ - 1.0.11: Fix boolean values not being displayed. When query is changed, enable autoscroll and scroll to last log.
+ - 1.0.10: Change keybindings for scrolling, add jump to beginning/end. Non-info level logs messages display as grey instead of white.
  - 1.0.9: Remove `yarn.lock` from published package since it is ignored. Fix terminal-kit version to `1.35.2`
+ - 1.0.8: Include `yarn.lock` in published package
+ - 1.0.7: Include `npm-shrinkwrap.json` in published package, add package.json `shrinkwrap` script to generate npm-shrinkwrap from yarn.lock
+ - 1.0.6: Add SHIFT_UP/SHIFT_DOWN keyboard commands for paged scrolling
 
 # development
 ## install

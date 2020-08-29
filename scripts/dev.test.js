@@ -25,6 +25,8 @@ const messageVerbs = [
 	'ignored'
 ];
 
+freshlog.Log.handlers.get('trace').enabled = true;
+
 var characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
 function randomString(length) {
 	let result = '';
@@ -84,9 +86,13 @@ rxjs.timer(0, logDelay).subscribe((x) => {
 	else if(rand1 < 0.03) {
 		level = 'warn';
 	}
+	else if(rand1 < 0.6) {
+		level = 'trace';
+	}
 
 	const message = messageNouns[Math.floor(Math.random()*messageNouns.length)] + ' ' + messageVerbs[Math.floor(Math.random()*messageVerbs.length)] + ` '${randomString(Math.floor(Math.random() * 12))}'` ;
-	freshlog.Log[level](
+	freshlog.Log.log(
+		level,
 		message,
 		{
 			tree: generateRandomTree(initialTreeDepth),
@@ -102,7 +108,8 @@ rxjs.timer(0, logDelay).subscribe((x) => {
 				name: 'bob',
 				roadsWalkedDown: Math.floor(Math.random()*10000),
 				[randomString(10)]: messageNouns[Math.floor(Math.random()*messageNouns.length)] 
-			}
+			},
+			isYes: Math.random() < 0.5? true: false,
 		}
 	);
 });

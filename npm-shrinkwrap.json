@@ -1,6 +1,6 @@
 {
   "name": "sift-cli",
-  "version": "1.0.8",
+  "version": "1.0.10",
   "lockfileVersion": 1,
   "requires": true,
   "dependencies": {
@@ -3177,21 +3177,163 @@
       "integrity": "sha1-Ngi3tPuROmCBkstav2FU45IfNZI="
     },
     "ts-jest": {
-      "version": "25.3.1",
-      "resolved": "https://registry.yarnpkg.com/ts-jest/-/ts-jest-25.3.1.tgz",
-      "integrity": "sha1-WOLtNQbk5Eh8C5tTKEalyt6WVro=",
+      "version": "26.2.0",
+      "resolved": "https://registry.yarnpkg.com/ts-jest/-/ts-jest-26.2.0.tgz",
+      "integrity": "sha1-fsIvrOsF7hRn/bUmXRszwnRB8WM=",
       "requires": {
+        "@types/jest": "26.0.10",
         "bs-logger": "0.2.6",
         "buffer-from": "1.1.1",
         "fast-json-stable-stringify": "2.1.0",
+        "jest-util": "26.3.0",
         "json5": "2.1.2",
         "lodash.memoize": "4.1.2",
         "make-error": "1.3.6",
-        "micromatch": "4.0.2",
         "mkdirp": "1.0.3",
-        "resolve": "1.15.1",
-        "semver": "6.3.0",
+        "semver": "7.3.2",
         "yargs-parser": "18.1.2"
+      },
+      "dependencies": {
+        "chalk": {
+          "version": "4.1.0",
+          "resolved": "https://registry.yarnpkg.com/chalk/-/chalk-4.1.0.tgz",
+          "integrity": "sha1-ThSHCmGNni7dl92DRf2dncMVZGo=",
+          "requires": {
+            "ansi-styles": "4.2.1",
+            "supports-color": "7.1.0"
+          }
+        },
+        "diff-sequences": {
+          "version": "25.2.6",
+          "resolved": "https://registry.yarnpkg.com/diff-sequences/-/diff-sequences-25.2.6.tgz",
+          "integrity": "sha1-X0Z8AO3TU1K3vKRteSfWDmh6dt0="
+        },
+        "graceful-fs": {
+          "version": "4.2.4",
+          "resolved": "https://registry.yarnpkg.com/graceful-fs/-/graceful-fs-4.2.4.tgz",
+          "integrity": "sha1-Ila94U02MpWMRl68ltxGfKB6Kfs="
+        },
+        "jest-diff": {
+          "version": "25.2.6",
+          "resolved": "https://registry.yarnpkg.com/jest-diff/-/jest-diff-25.2.6.tgz",
+          "integrity": "sha1-ptcKmrdFB3FeoQkqxRPRq4HBtec=",
+          "requires": {
+            "chalk": "3.0.0",
+            "diff-sequences": "25.2.6",
+            "jest-get-type": "25.2.6",
+            "pretty-format": "25.2.6"
+          },
+          "dependencies": {
+            "chalk": {
+              "version": "3.0.0",
+              "resolved": "https://registry.yarnpkg.com/chalk/-/chalk-3.0.0.tgz",
+              "integrity": "sha1-P3PCv1JlkfV0zEksUeJFY0n4ROQ=",
+              "requires": {
+                "ansi-styles": "4.2.1",
+                "supports-color": "7.1.0"
+              }
+            }
+          }
+        },
+        "jest-get-type": {
+          "version": "25.2.6",
+          "resolved": "https://registry.yarnpkg.com/jest-get-type/-/jest-get-type-25.2.6.tgz",
+          "integrity": "sha1-Cwoy+riQi0TVCL6BaBSH26u42Hc="
+        },
+        "jest-util": {
+          "version": "26.3.0",
+          "resolved": "https://registry.yarnpkg.com/jest-util/-/jest-util-26.3.0.tgz",
+          "integrity": "sha1-qJdLGR3zDiv1I+u/266478pTWz4=",
+          "requires": {
+            "@jest/types": "26.3.0",
+            "@types/node": "14.6.0",
+            "chalk": "4.1.0",
+            "graceful-fs": "4.2.4",
+            "is-ci": "2.0.0",
+            "micromatch": "4.0.2"
+          }
+        },
+        "pretty-format": {
+          "version": "25.2.6",
+          "resolved": "https://registry.yarnpkg.com/pretty-format/-/pretty-format-25.2.6.tgz",
+          "integrity": "sha1-VCocQY0Bm78cyi42IEQ7wTI8uNc=",
+          "requires": {
+            "@jest/types": "25.2.6",
+            "ansi-regex": "5.0.0",
+            "ansi-styles": "4.2.1",
+            "react-is": "16.13.1"
+          },
+          "dependencies": {
+            "chalk": {
+              "version": "3.0.0",
+              "resolved": "https://registry.yarnpkg.com/chalk/-/chalk-3.0.0.tgz",
+              "integrity": "sha1-P3PCv1JlkfV0zEksUeJFY0n4ROQ=",
+              "requires": {
+                "ansi-styles": "4.2.1",
+                "supports-color": "7.1.0"
+              }
+            },
+            "@jest/types": {
+              "version": "25.2.6",
+              "resolved": "https://registry.yarnpkg.com/@jest/types/-/types-25.2.6.tgz",
+              "integrity": "sha1-wS9Er5vtREQ4CR5LWeftBfhlnLY=",
+              "requires": {
+                "@types/istanbul-lib-coverage": "2.0.1",
+                "@types/istanbul-reports": "1.1.1",
+                "@types/yargs": "15.0.4",
+                "chalk": "3.0.0"
+              }
+            },
+            "@types/istanbul-reports": {
+              "version": "1.1.1",
+              "resolved": "https://registry.yarnpkg.com/@types/istanbul-reports/-/istanbul-reports-1.1.1.tgz",
+              "integrity": "sha1-eoy/akBvNsit2HFiWyeOrwsNJVo=",
+              "requires": {
+                "@types/istanbul-lib-coverage": "2.0.1",
+                "@types/istanbul-lib-report": "3.0.0"
+              }
+            }
+          }
+        },
+        "semver": {
+          "version": "7.3.2",
+          "resolved": "https://registry.yarnpkg.com/semver/-/semver-7.3.2.tgz",
+          "integrity": "sha1-YElisFK4HtB4aq6EOJ/7pw/9OTg="
+        },
+        "@jest/types": {
+          "version": "26.3.0",
+          "resolved": "https://registry.yarnpkg.com/@jest/types/-/types-26.3.0.tgz",
+          "integrity": "sha1-l2J79L23LFU0bu+Y47P33cSUH3E=",
+          "requires": {
+            "@types/istanbul-lib-coverage": "2.0.1",
+            "@types/istanbul-reports": "3.0.0",
+            "@types/node": "14.6.0",
+            "@types/yargs": "15.0.4",
+            "chalk": "4.1.0"
+          }
+        },
+        "@types/istanbul-reports": {
+          "version": "3.0.0",
+          "resolved": "https://registry.yarnpkg.com/@types/istanbul-reports/-/istanbul-reports-3.0.0.tgz",
+          "integrity": "sha1-UIsTqjRPpJdiNOdd3cw0klc32CE=",
+          "requires": {
+            "@types/istanbul-lib-report": "3.0.0"
+          }
+        },
+        "@types/jest": {
+          "version": "26.0.10",
+          "resolved": "https://registry.yarnpkg.com/@types/jest/-/jest-26.0.10.tgz",
+          "integrity": "sha1-j69+l1bAM8OQFK52pzKe/qAOpgc=",
+          "requires": {
+            "jest-diff": "25.2.6",
+            "pretty-format": "25.2.6"
+          }
+        },
+        "@types/node": {
+          "version": "14.6.0",
+          "resolved": "https://registry.yarnpkg.com/@types/node/-/node-14.6.0.tgz",
+          "integrity": "sha1-fUQRv1FXM5M318/4ZNn/RfF3tJk="
+        }
       }
     },
     "tslib": {
@@ -3239,9 +3381,9 @@
       }
     },
     "typescript": {
-      "version": "3.8.3",
-      "resolved": "https://registry.yarnpkg.com/typescript/-/typescript-3.8.3.tgz",
-      "integrity": "sha1-QJ64VE6gM1cRIFhp7EWKsQnuEGE="
+      "version": "4.0.2",
+      "resolved": "https://registry.yarnpkg.com/typescript/-/typescript-4.0.2.tgz",
+      "integrity": "sha1-fqfIh3fHI8aB4zv3mIvl0AjQWsI="
     },
     "union-value": {
       "version": "1.0.1",

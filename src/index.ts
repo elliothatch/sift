@@ -87,7 +87,7 @@ display.terminal.on('key', (name: any, matches: any, data: any) => {
             // display.logDisplayPanel.print(0);
             drawLogs();
         }
-        else if(name === 'SHIFT_UP') {
+        else if(name === 'PAGE_UP') {
             if(cursorPause < 0) {
                 cursorPause = display.logDisplayPanel.logs.length - 22;
             }
@@ -105,7 +105,7 @@ display.terminal.on('key', (name: any, matches: any, data: any) => {
             }
             drawLogs();
         }
-        else if(name === 'SHIFT_DOWN') {
+        else if(name === 'PAGE_DOWN') {
             if(cursorPause < 0) {
                 cursorPause = display.logDisplayPanel.logs.length - 1;
             }
@@ -115,6 +115,19 @@ display.terminal.on('key', (name: any, matches: any, data: any) => {
             drawLogs();
         }
         else if(name === 'DOWN') {
+            if(cursorPause < 0) {
+                cursorPause = display.logDisplayPanel.logs.length - 1;
+            }
+            else {
+                cursorPause = Math.min(display.logDisplayPanel.logs.length - 1, cursorPause + 1);
+            }
+            drawLogs();
+        }
+        else if(name === 'HOME') {
+            cursorPause = 0;
+            drawLogs();
+        }
+        else if(name === 'END') {
             cursorPause = -1;
             drawLogs();
         }
@@ -135,7 +148,7 @@ display.terminal.on('key', (name: any, matches: any, data: any) => {
 			display.queryPanel.draw();
 			onQueryChanged();
         }
-        else if(name === 'PAGE_UP') {
+        else if(name === 'SHIFT_UP') {
             logdb.fuzzysortThreshold = Math.floor(logdb.fuzzysortThreshold * 10);
             const fuzzyThresholdStr = Math.log10(-logdb.fuzzysortThreshold).toString();
 			(display.fuzzyThreshold.buffer as any).setText('');
@@ -147,7 +160,7 @@ display.terminal.on('key', (name: any, matches: any, data: any) => {
             display.fuzzyThreshold.draw();
             onQueryChanged();
         }
-        else if(name === 'PAGE_DOWN') {
+        else if(name === 'SHIFT_DOWN') {
             logdb.fuzzysortThreshold = Math.min(-1, logdb.fuzzysortThreshold / 10);
             const fuzzyThresholdStr = Math.log10(-logdb.fuzzysortThreshold).toString();
 			(display.fuzzyThreshold.buffer as any).setText('');
@@ -259,6 +272,9 @@ queryChangedSubject.pipe(
         logDisplayPanel.resultSet = undefined;
 
         logDisplayPanel.logEntryCache.clear();
+
+        // enable autoscroll and scroll to bottom whenever query is changed
+        cursorPause = -1;
 
         if(expr.length === 0) {
             logDisplayPanel.logs = logdb.logs;

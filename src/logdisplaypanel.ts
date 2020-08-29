@@ -55,6 +55,7 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
             info: 'bold',
             warn: 'yellow',
             error: 'red',
+            default: 'grey',
         };
 
         this.addChild(this.idxPanel);
@@ -176,9 +177,10 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
     }
 
     public static printLog(record: LogRecord, printOptions: LogDisplayPanel.PrintOptions): number {
-        const messageColor = record.log && record.log.level?
-            printOptions.logLevelColors[record.log.level]:
-            printOptions.logLevelColors.info;
+        let messageColor = printOptions.logLevelColors.default;
+        if(record.log && record.log.level && printOptions.logLevelColors[record.log.level]) {
+            messageColor = printOptions.logLevelColors[record.log.level];
+        }
 
         if(record.log.timestamp !== undefined) {
             printOptions.dst.insert('[', {color: messageColor, dim: true});
@@ -268,7 +270,7 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
         // }
 
         // print
-        if(obj == null || typeof obj === 'string' || typeof obj === 'number') {
+        if(obj == null || typeof obj === 'string' || typeof obj === 'number' || typeof obj === 'boolean') {
             if(typeof obj === 'string') {
                 printOptions.dst.insert('"', attr);
             }
