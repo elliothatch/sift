@@ -11,6 +11,7 @@ import { Display } from './display';
 import { Panel } from './panel';
 import { LogDb, LogRecord, LogIndex, ResultSet, FilterMatch } from './logdb';
 import { Parse, Parser } from './query';
+import { Command } from './commandpanel';
 
 const exitLogs: Array<{level?: string, message: any}> = [];
 
@@ -57,9 +58,42 @@ const parser = new Parser();
 
 let cursorPause = -1;
 
+
+display.commandPanel.setCommands([{
+    key: '\\',
+    description: 'insert \\',
+    action: (key, matches, data) => {
+        exitCommandMode();
+        display.queryPanel.buffer.insert(key);
+        display.queryPanel.draw();
+        onQueryChanged();
+    }
+}, {
+    key: 'f',
+    description: 'filter',
+    action: (key, matches, data) => {
+        exitCommandMode();
+    }
+}]);
+
+let commandMode = 0;
+
 display.terminal.on('key', (name: any, matches: any, data: any) => {
 	try {
-		if(name === 'CTRL_C') {
+	    if(commandMode === 1) {
+	        // top level command mode
+	        if(name === 'CTRL_C' || name === 'ESCAPE' || name === 'BACKSPACE') {
+	            exitCommandMode();
+            }
+            else {
+                display.commandPanel.commands.forEach((command) => {
+                    if(name === command.key) {
+                        command.action(name, matches, data);
+                    }
+                });
+            }
+        }
+		else if(name === 'CTRL_C') {
 			if(targetProcess.running) {
                 logdb.ingest(JSON.stringify({level: 'warn', message: `Sending SIGTERM to child process "${targetProcess.process.spawnfile}" (${targetProcess.process.pid})`}));
 			    targetProcess.process.kill();
@@ -67,6 +101,9 @@ display.terminal.on('key', (name: any, matches: any, data: any) => {
             else {
                 close();
             }
+        }
+		else if(name === '\\') {
+            enterCommandMode();
         }
 		else if(name === 'BACKSPACE') {
 			display.queryPanel.buffer.backDelete(1);
@@ -401,4 +438,14 @@ function insertSorted<T>(t: T, arr: Array<T>, comparator: (a: T, b: T) => number
 
     arr.push(t);
     return arr.length - 1;
+}
+
+function enterCommandMode() {
+    commandMode = 1;
+    display.showCommandPanel();
+}
+
+function exitCommandMode() {
+    commandMode = 0;
+    display.hideCommandPanel();
 }

@@ -45,6 +45,24 @@ export abstract class Panel<T extends Buffer> {
         child.getScreenBuffer().dst = this.getScreenBuffer();
     };
 
+    /**
+     * removes the panel from list of children, if found.
+     * draw() must not be called on the child until it is added as a child to another panel, or the screenbuffer dst is set to a valid buffer or terminal
+     */
+    public removeChild(child: Panel<Buffer>): boolean {
+        const childIndex = this.children.findIndex((t) => t === child);
+        if(childIndex === -1) {
+            return false;
+        }
+
+        this.children.splice(childIndex);
+        child.parent = undefined;
+
+        // child.getScreenBuffer().dst = undefined;
+
+        return true;
+    };
+
     /** returns the screen buffer if it is one, or the dst buffer of a TextBuffer */
     public abstract getScreenBuffer(): ScreenBuffer;
 
@@ -92,7 +110,7 @@ export abstract class Panel<T extends Buffer> {
         }
 
         if(this.calculatedHeight === 0 || this.calculatedWidth === 0) {
-            throw new Error(`Panel.resize: panel '${this.options.name}' has flex '${this.options.flex}', but does not have its own width/height calculated. Ensure resize() has been drawn on the parent of '${this.options.name}', or disable flex on this panel`);
+            throw new Error(`Panel.resize: panel '${this.options.name}' has flex '${JSON.stringify(this.options.flex)}', but does not have its own width/height calculated. Ensure resize() has been drawn on the parent of '${this.options.name}', or disable flex on this panel`);
         }
 
         this.getScreenBuffer().resize({

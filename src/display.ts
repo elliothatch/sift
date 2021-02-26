@@ -2,6 +2,7 @@ import {terminal, Terminal, Buffer, ScreenBuffer, TextBuffer} from 'terminal-kit
 
 import { ScreenPanel, TextPanel } from './panel';
 import { LogDisplayPanel } from './logdisplaypanel';
+import { CommandPanel } from './commandpanel';
 
 export class Display {
 
@@ -16,6 +17,8 @@ export class Display {
     public processPanel: ScreenPanel;
     public queryBar: ScreenPanel;
     public queryPanel: TextPanel;
+
+    public commandPanel: CommandPanel;
 
     constructor(term?: Terminal) {
         this.terminal = term || terminal;
@@ -120,6 +123,13 @@ export class Display {
         });
         this.queryBar.addChild(this.queryPanel);
 
+        this.commandPanel = new CommandPanel(this.rootPanel.buffer, {
+            name: 'command',
+            width: 1,
+            height: 1,
+            flex: {width: true},
+        });
+
         this.rootPanel.resize();
 
         this.terminal.on('resize', (width: number, height: number) => {
@@ -146,6 +156,26 @@ export class Display {
         // this.queryPanel.buffer.dst.fill({char: '8', attr: {color: 'black', bgColor: 'white'}});
 
         this.rootPanel.redrawChildren();
+    }
+
+    public showCommandPanel() {
+        if(this.commandPanel.parent !== undefined) {
+            return;
+        }
+
+        this.rootPanel.addChild(this.commandPanel);
+        this.rootPanel.resize();
+        this.commandPanel.printCommands();
+        this.commandPanel.redrawChildren();
+        this.commandPanel.draw();
+        (this.terminal as any).hideCursor();
+    }
+
+    public hideCommandPanel() {
+        this.rootPanel.removeChild(this.commandPanel);
+        this.rootPanel.resize();
+        this.rootPanel.redrawChildren();
+        (this.terminal as any).hideCursor(false);
     }
 }
 
