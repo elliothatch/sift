@@ -3,6 +3,7 @@ import {terminal, Terminal, Buffer, ScreenBuffer, TextBuffer} from 'terminal-kit
 import { ScreenPanel, TextPanel } from './panel';
 import { LogDisplayPanel } from './logdisplaypanel';
 import { CommandPanel } from './commandpanel';
+import { FilterPanel } from './filterpanel';
 
 export class Display {
 
@@ -19,6 +20,7 @@ export class Display {
     public queryPanel: TextPanel;
 
     public commandPanel: CommandPanel;
+    public filterPanel: FilterPanel;
 
     constructor(term?: Terminal) {
         this.terminal = term || terminal;
@@ -112,6 +114,7 @@ export class Display {
         });
         this.queryBar.addChild(queryPromptPanel);
         (queryPromptPanel.buffer as any).put({x: 0, y: 0}, '>');
+        (queryPromptPanel.buffer as any).put({x: 1, y: 0}, ' ');
 
 
         this.queryPanel = new TextPanel(this.rootPanel.buffer, {
@@ -125,6 +128,13 @@ export class Display {
 
         this.commandPanel = new CommandPanel(this.rootPanel.buffer, {
             name: 'command',
+            width: 1,
+            height: 1,
+            flex: {width: true},
+        });
+
+        this.filterPanel = new FilterPanel(this.rootPanel.buffer, {
+            name: 'filter',
             width: 1,
             height: 1,
             flex: {width: true},
@@ -165,6 +175,7 @@ export class Display {
 
         this.rootPanel.addChild(this.commandPanel);
         this.rootPanel.resize();
+        this.queryBar.draw();
         this.commandPanel.printCommands();
         this.commandPanel.redrawChildren();
         this.commandPanel.draw();
@@ -173,6 +184,27 @@ export class Display {
 
     public hideCommandPanel() {
         this.rootPanel.removeChild(this.commandPanel);
+        this.rootPanel.resize();
+        this.rootPanel.redrawChildren();
+        (this.terminal as any).hideCursor(false);
+    }
+
+    public showFilterPanel() {
+        if(this.filterPanel.parent !== undefined) {
+            return;
+        }
+
+        this.rootPanel.addChild(this.filterPanel);
+        this.rootPanel.resize();
+        this.queryBar.draw();
+        this.filterPanel.printRules();
+        this.filterPanel.redrawChildren();
+        this.filterPanel.draw();
+        (this.terminal as any).hideCursor();
+    }
+
+    public hideFilterPanel() {
+        this.rootPanel.removeChild(this.filterPanel);
         this.rootPanel.resize();
         this.rootPanel.redrawChildren();
         (this.terminal as any).hideCursor(false);

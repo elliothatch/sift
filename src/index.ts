@@ -73,14 +73,31 @@ display.commandPanel.setCommands([{
     description: 'filter',
     action: (key, matches, data) => {
         exitCommandMode();
+        enterFilterMode();
     }
 }]);
 
-let commandMode = 0;
+display.filterPanel.setRules([{
+    enabled: false,
+    name: 'Error',
+    query: 'level:error'
+}, {
+    enabled: false,
+    name: 'Warning',
+    query: 'level:warn'
+}]);
+
+enum CommandMode {
+    QUERY,
+    COMMAND,
+    FILTER,
+};
+
+let commandMode: CommandMode = CommandMode.QUERY;
 
 display.terminal.on('key', (name: any, matches: any, data: any) => {
 	try {
-	    if(commandMode === 1) {
+	    if(commandMode === CommandMode.COMMAND) {
 	        // top level command mode
 	        if(name === 'CTRL_C' || name === 'ESCAPE' || name === 'BACKSPACE') {
 	            exitCommandMode();
@@ -91,6 +108,25 @@ display.terminal.on('key', (name: any, matches: any, data: any) => {
                         command.action(name, matches, data);
                     }
                 });
+            }
+        }
+        else if(commandMode === CommandMode.FILTER) {
+	        if(name === 'CTRL_C' || name === 'ESCAPE' || name === 'BACKSPACE') {
+	            exitFilterMode();
+            }
+            else if(name === '1') {
+                display.filterPanel.rules[0].enabled = !display.filterPanel.rules[0].enabled;
+                display.filterPanel.printRules();
+                display.filterPanel.redrawChildren();
+                display.filterPanel.draw();
+                onQueryChanged();
+            }
+            else if(name === '2') {
+                display.filterPanel.rules[1].enabled = !display.filterPanel.rules[1].enabled;
+                display.filterPanel.printRules();
+                display.filterPanel.redrawChildren();
+                display.filterPanel.draw();
+                onQueryChanged();
             }
         }
 		else if(name === 'CTRL_C') {
@@ -300,6 +336,34 @@ queryChangedSubject.pipe(
             return;
         }
 
+        // apply rules from FILTER panel
+        const filterExpr: Parse.Expression | undefined = display.filterPanel.rules
+            .filter((rule) => rule.enabled && rule.expr)
+            .reduce((filter, rule) => {
+                if(!filter) {
+                    return rule.expr;
+                }
+
+                return {
+                    eType: 'OR',
+                    lhs: rule.expr,
+                    rhs: filter
+                };
+        }, undefined as Parse.Expression | undefined);
+
+        if(filterExpr) {
+            if(expr.length === 0) {
+                expr = [filterExpr];
+            }
+            else {
+                expr[0] = {
+                    eType: 'AND',
+                    lhs: expr[0],
+                    rhs: filterExpr
+                };
+            }
+        };
+
         if(filterSubscription) {
             filterSubscription.unsubscribe();
             filterSubscription = undefined;
@@ -441,11 +505,21 @@ function insertSorted<T>(t: T, arr: Array<T>, comparator: (a: T, b: T) => number
 }
 
 function enterCommandMode() {
-    commandMode = 1;
+    commandMode = CommandMode.COMMAND;
     display.showCommandPanel();
 }
 
 function exitCommandMode() {
-    commandMode = 0;
+    commandMode = CommandMode.QUERY;
     display.hideCommandPanel();
+}
+
+function enterFilterMode() {
+    commandMode = CommandMode.FILTER;
+    display.showFilterPanel();
+}
+
+function exitFilterMode() {
+    commandMode = CommandMode.QUERY;
+    display.hideFilterPanel();
 }

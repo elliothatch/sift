@@ -45,8 +45,9 @@ export class CommandPanel extends Panel<ScreenBuffer> {
 
     public setCommands(commands: Command[]): void {
         this.commands = commands;
-        if(this.options.height !== this.commands.length) {
-            this.options.height = this.commands.length
+        const panelHeight = this.commands.length + 1;
+        if(this.options.height !== panelHeight) {
+            this.options.height = panelHeight
             if(this.parent) {
                 this.parent.resize();
             }
@@ -54,11 +55,35 @@ export class CommandPanel extends Panel<ScreenBuffer> {
     }
 
     public printCommands(): void {
+        // clear
         this.keyPanel.buffer.fill({char: ' '});
-        (this.keyPanel.buffer as any).moveTo(1,0);
-
         (this.descriptionPanel.buffer as any).setText('');
+
+        // title row
+        (this.keyPanel.buffer as any).fill({
+            char: ' ',
+            region: {
+                x: 0,
+                y: 0,
+                width: this.keyPanel.calculatedWidth,
+                height: 1
+            },
+            attr: {underline: true}
+        });
+        (this.keyPanel.buffer as any).put({
+            x: 0,
+            y: 0,
+            attr: {underline: true}
+        }, 'key');
+
+
         (this.descriptionPanel.buffer as any).moveTo(0,0);
+        this.descriptionPanel.buffer.insert(' '.repeat(this.descriptionPanel.calculatedWidth), {underline: true});
+        (this.descriptionPanel.buffer as any).moveTo(0,0);
+        this.descriptionPanel.buffer.insert('description', {underline: true});
+
+        (this.keyPanel.buffer as any).moveTo(1,1);
+        (this.descriptionPanel.buffer as any).moveTo(0,1);
 
         this.commands.forEach((command) => {
             (this.keyPanel.buffer as any).put({
@@ -71,12 +96,6 @@ export class CommandPanel extends Panel<ScreenBuffer> {
             this.descriptionPanel.buffer.newLine();
         });
         
-    }
-}
-
-export namespace CommandPanel {
-    export interface Options {
-        commands: Command[];
     }
 }
 
