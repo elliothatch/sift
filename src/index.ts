@@ -317,7 +317,7 @@ let filterSubscription: Subscription | undefined = undefined;
 
 const queryChangedSubject = new Subject();
 function onQueryChanged() {
-    queryChangedSubject.next();
+    queryChangedSubject.next(null);
 }
 
 const queryUpdateDelay = 100;
@@ -448,7 +448,7 @@ drawLogsLimiter.pipe(
 })
 
 function drawLogs() {
-    drawLogsLimiter.next();
+    drawLogsLimiter.next(null);
 }
 
 const drawQueryResultLimiter = new Subject();
@@ -471,7 +471,7 @@ drawQueryResultLimiter.pipe(
 });
 
 function drawQueryResult() {
-    drawQueryResultLimiter.next();
+    drawQueryResultLimiter.next(null);
 }
 
 function close() {
