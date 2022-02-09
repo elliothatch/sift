@@ -3,6 +3,19 @@ import {Attributes, Terminal, Buffer, ScreenBuffer, TextBuffer} from 'terminal-k
 import { Panel, ScreenPanel, TextPanel } from './panel';
 import {LogRecord, LogIdx, PropertyId, ResultSet, FilterMatch } from './logdb';
 
+/** a substitution in a format string */
+export interface LogSubstitution {
+    /** name of the property whose value will be substituted. nested properties can be specified with dot notation */
+    property: string;
+    attributes?: Attributes;
+    /** string to prefix substitution, only used if property value is not null */
+    prefix?: string;
+    /** string to suffix substitution, only used if property value is not null */
+    suffix?: string;
+    /** by default, if the value of a property is undefined or null, the entire substitution is ignored and nothing is printed. if showNull is set to true, null/undefined values will be be displayed. in this case, prefix and suffix are always printed. */
+    showNull?: boolean;
+}
+
 export class LogDisplayPanel extends Panel<ScreenBuffer> {
     /** displays a list of logs */
     public logPanel: ScreenPanel;
@@ -11,14 +24,28 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
     // public logs: SkipList<LogIdx, LogRecord>;
     public logs: LogRecord[];
     public resultSet?: ResultSet;
-    public expandedView: boolean;
+    // public expandedView: boolean;
     public logLevelColors: {[level: string]: string};
+    public logFormat: Array<string | LogSubstitution>;
 
     // add doubly linked list of items to make it an LRU cache
     // each node stores a TextBuffer which is filled with formatted text
     // then we draw() the contents with dst = logPanel when needed
     public logEntryCache: Map<LogIdx, TextBuffer>;
     public maxLogEntries: number = 200;
+
+    /** index of the topmost log on screen */
+    public scrollLogIdx: number = 0;
+    /** line we have scrolled to within the scrollLogIdx record */
+    public scrollPosition: number = 0;
+    /** set of all logs that are expanded */
+    public expandedLogs: Set<LogIdx>;
+
+    public selectionLogIdx: number = 0;
+    /** if the cursor is in an expanded log, this is the offset */
+    public selectionScrollPosition: number = 0;
+
+
 
     constructor(dst: Buffer | Terminal, options: Panel.Options, logDisplayOptions?: Partial<LogDisplayPanel.Options>) {
         super(options, new ScreenBuffer({
@@ -46,11 +73,12 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
         });
 
         this.logEntryCache = new Map();
+        this.expandedLogs = new Set();
 
         // TODO: width/height calculation is wrong if FLEX enabled?? */
         this.logs = [];
         this.options.flexCol = true;
-        this.expandedView = false;
+        // this.expandedView = false;
         this.logLevelColors = logDisplayOptions && logDisplayOptions.logLevelColors || {
             info: 'bold',
             warn: 'yellow',
@@ -58,8 +86,23 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
             default: 'grey',
         };
 
+        this.logFormat = this.parseLogFormat('{timestamp|dim|[|]}][{level|dim|[|]}]{message}');
+
+
         this.addChild(this.idxPanel);
         this.addChild(this.logPanel);
+    }
+
+    /** @param formatStr - a format string used to color, style, and substitute values in the log summary
+    * substitutions are indictated with curly braces {property|attributes|prefix|suffix}
+    * attributes is a comma separated list of name:value pairs of terminal-kit attributes
+    * see interface LogSubstitution for more details
+    * TODO: should the substituions just be a json object used with JSON.parse? that seems overly verbose, but also easy to implement. also you don't have to memorize the order, and there is only one "definition" of the log format (interface LogSubstitution)
+    * @returns array of strings and substitutions, which will be concatenated to create the log string
+    */
+    public parseLogFormat(formatStr: string): Array<string | LogSubstitution> {
+        // TODO: parse format str
+        return [];
     }
 
     public getScreenBuffer(): ScreenBuffer {
@@ -76,13 +119,26 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
             dst: textBuffer,
             matches: this.resultSet && this.resultSet.matches,
             logLevelColors: this.logLevelColors,
-            expandedView: this.expandedView,
+            expandedView: this.expandedLogs.has(record.idx),
             indentStr: ' '.repeat(4),
         };
 
         const linesPrinted = LogDisplayPanel.printLog(record, printOptions);
         // printOptions.dst.insert(JSON.stringify(record.log));
         // textBuffer.draw();
+
+        // if(this.selectionLogIdx === record.idx) {
+            // highlight the selected row
+            // for(let i = 0; i < (this.logPanel.getScreenBuffer() as any).width; i++) {
+            //     const {char, attr} = (this.logPanel.getScreenBuffer() as any).get({x: i, y: this.selectionScrollPosition});
+            //     attr.inverse = true;
+            //     (this.logPanel.getScreenBuffer() as any).put({
+            //         x: i,
+            //         y: this.selectionScrollPosition,
+            //         attr
+            //     }, char);
+            // }
+        // }
 
         return textBuffer;
     }
@@ -104,16 +160,17 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
         return logEntry;
     }
 
-    public printLogEntry(logEntry: TextBuffer, row: number) {
+    /** prints a single line of a log entry */
+    public printLogEntry(logEntry: TextBuffer, row: number, scrollPosition: number) {
         (logEntry as any).draw({
             dst: this.logPanel.getScreenBuffer(),
             x: 0,
-            y: row,
-            dstClipRect: {
+            y: row - scrollPosition,
+            srcClipRect: {
                 x: 0,
-                y: row,
+                y: scrollPosition,
                 width: this.logPanel.calculatedWidth,
-                height: logEntry.getContentSize().height,
+                height: 1,
             },
         });
     }
@@ -122,8 +179,275 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
     public appendLog(record: LogRecord, y: number) {
     }
 
+    public print() {
+        this.logPanel.buffer.fill({char: ' '});
+        this.logPanel.buffer.moveTo(0, 0);
+        (this.idxPanel.buffer as any).setText('');
+        (this.idxPanel.buffer as any).moveTo(0, 0);
+
+        let entryIdx = this.scrollLogIdx;
+        let entryScrollPos = this.scrollPosition;
+
+        for(let i = 0; i < this.logPanel.calculatedHeight; i++) {
+            if(entryIdx >= this.logs.length) {
+                break;
+            }
+
+            const record = this.logs[entryIdx];
+            const logEntry = this.getLogEntry(record);
+
+            if(entryScrollPos === 0) {
+                this.printIdx(record.idx, i);
+            }
+
+            this.printLogEntry(logEntry, i, entryScrollPos);
+            if(this.selectionLogIdx === entryIdx && this.selectionScrollPosition === entryScrollPos) {
+                // invert the colors of the selected row
+                for(let col = 0; col < this.logPanel.calculatedWidth; col++) {
+                    const {char, attr} = (this.logPanel.buffer as any).get({x: col, y: i});
+                    attr.inverse = true;
+                    (this.logPanel.buffer as any).put({x: col, y: i, attr}, char);
+                }
+            }
+
+            entryScrollPos++;
+
+            const logHeight = logEntry.getContentSize().height;
+            if(entryScrollPos >= logHeight) {
+                // reached end of log, move onto next
+                entryIdx++;
+                entryScrollPos = 0;
+            }
+            // this.redrawChildren();
+            // this.draw();
+        }
+    }
+
+    /** sets scrollLogIdx and scrollPosition so the target log is at the bottom of the screen */
+    public scrollToLogFromBottom(idx: number) {
+        let entryIdx = idx;
+        let totalHeight = 0;
+
+        while(totalHeight < this.logPanel.calculatedHeight) {
+            if(entryIdx < 0) {
+                break;
+            }
+
+            const record = this.logs[entryIdx];
+            const logEntry = this.getLogEntry(record);
+            const logHeight = logEntry.getContentSize().height;
+
+            totalHeight += logHeight;
+            entryIdx--;
+        }
+
+        this.scrollLogIdx = entryIdx + 1;
+        this.scrollPosition = totalHeight - this.logPanel.calculatedHeight;
+    }
+
+    public scrollToLog(idx: number) {
+        this.scrollLogIdx = Math.max(0, Math.min(idx, this.logs.length));
+        this.scrollPosition = 0;
+    }
+
+    public scrollUp(count: number) {
+        for(let i = 0; i < count; i++) {
+            if(this.scrollPosition > 0) {
+                this.scrollPosition--;
+            }
+            else {
+                if(this.scrollLogIdx <= 0) {
+                    return;
+                }
+
+                this.scrollLogIdx--;
+                const record = this.logs[this.scrollLogIdx];
+                const logEntry = this.getLogEntry(record);
+                const logHeight = logEntry.getContentSize().height;
+                this.scrollPosition = logHeight - 1;
+            }
+        }
+    }
+
+    public scrollDown(count: number) {
+        for(let i = 0; i < count; i++) {
+            const record = this.logs[this.scrollLogIdx];
+            const logEntry = this.getLogEntry(record);
+            const logHeight = logEntry.getContentSize().height;
+
+            if(this.scrollPosition < logHeight - 1) {
+                this.scrollPosition++;
+            }
+            else {
+                if(this.scrollLogIdx >= this.logs.length - 1) {
+                    return;
+                }
+
+                this.scrollLogIdx++;
+                this.scrollPosition = 0;
+            }
+        }
+    }
+
+    /** find the log and scroll index of the bottom entry on the screen. */
+    public getBottomPosition(): {idx: LogIdx, scrollPosition: number} | undefined {
+        let entryIdx = this.scrollLogIdx;
+
+        let totalHeight = -this.scrollPosition;
+        let lastLogHeight = 0;
+
+        while(totalHeight < this.logPanel.calculatedHeight) {
+            if(entryIdx >= this.logs.length) {
+                // you can't scroll past the end of the list
+                return undefined;
+            }
+
+            const record = this.logs[entryIdx];
+            const logEntry = this.getLogEntry(record);
+            lastLogHeight = logEntry.getContentSize().height;
+
+            totalHeight += lastLogHeight;
+            entryIdx++;
+        }
+
+        return {
+            idx: entryIdx - 1,
+            scrollPosition: lastLogHeight - (totalHeight - this.logPanel.calculatedHeight) - 1
+        };
+    }
+
+    /** scrolls the screen until the selection is in view */
+    public scrollToSelection() {
+        if(this.selectionLogIdx < this.scrollLogIdx) {
+            this.scrollLogIdx = this.selectionLogIdx;
+            this.scrollPosition = this.selectionScrollPosition;
+        }
+        else if(this.selectionLogIdx === this.scrollLogIdx
+            && this.selectionScrollPosition < this.scrollPosition) {
+            this.scrollPosition = this.selectionScrollPosition;
+        }
+        else {
+            const bottomPosition = this.getBottomPosition();
+            if(!bottomPosition) {
+                return;
+            }
+            if(this.selectionLogIdx > bottomPosition.idx) {
+                this.scrollToLogFromBottom(this.selectionLogIdx);
+                // scrollToLogFromBottom will scroll to the end of the log if its expanded, but we want to be at the beginning of the log as if we scrolled down from above
+                const selectedLogHeight = this.getLogEntry(this.logs[this.selectionLogIdx]).getContentSize().height;
+                this.scrollUp(selectedLogHeight - 1 - this.selectionScrollPosition);
+            }
+            else if(this.selectionLogIdx === bottomPosition.idx
+                && this.selectionScrollPosition > bottomPosition.scrollPosition) {
+                this.scrollDown(this.selectionScrollPosition - bottomPosition.scrollPosition);
+            }
+        }
+    }
+
+    public selectLog(idx: number) {
+        this.selectionLogIdx = idx;
+        this.selectionScrollPosition = 0;
+    }
+
+    public moveSelectionUp(count: number) {
+        for(let i = 0; i < count; i++) {
+            if(this.selectionScrollPosition > 0) {
+                this.selectionScrollPosition--;
+                // this.logEntryCache.delete(this.selectionLogIdx);
+            }
+            else {
+                if(this.selectionLogIdx <= 0) {
+                    return;
+                }
+
+                // this.logEntryCache.delete(this.selectionLogIdx);
+                this.selectionLogIdx--;
+
+                const record = this.logs[this.selectionLogIdx];
+                const logEntry = this.getLogEntry(record);
+                const logHeight = logEntry.getContentSize().height;
+                this.selectionScrollPosition = logHeight - 1;
+
+                // this.logEntryCache.delete(this.selectionLogIdx);
+            }
+        }
+    }
+
+    public moveSelectionDown(count: number) {
+        for(let i = 0; i < count; i++) {
+            const record = this.logs[this.selectionLogIdx];
+            const logEntry = this.getLogEntry(record);
+            const logHeight = logEntry.getContentSize().height;
+
+            if(this.selectionScrollPosition < logHeight - 1) {
+                this.selectionScrollPosition++;
+            }
+            else {
+                if(this.selectionLogIdx >= this.logs.length - 1) {
+                    return;
+                }
+
+                // this.logEntryCache.delete(this.selectionLogIdx);
+                this.selectionLogIdx++;
+                this.selectionScrollPosition = 0;
+                // this.logEntryCache.delete(this.selectionLogIdx);
+            }
+
+        }
+    }
+
+
+    /**
+* @returns true if the log was expanded, and false if it was collapsed
+*/
+    public toggleExpandSelection(): boolean {
+        if(this.expandedLogs.has(this.selectionLogIdx)) {
+            this.expandedLogs.delete(this.selectionLogIdx);
+            this.selectionScrollPosition = 0;
+            this.logEntryCache.delete(this.selectionLogIdx);
+
+            if(this.selectionLogIdx === this.scrollLogIdx) {
+                // prevent invalid scroll position
+                this.scrollPosition = 0;
+            }
+            return false;
+        }
+        else {
+            this.expandedLogs.add(this.selectionLogIdx);
+            this.logEntryCache.delete(this.selectionLogIdx);
+            return true;
+        }
+
+    }
+
+    /** scrolls the view to ensure the maxiumum amount of the specified log is shown.
+    * ensures the beginning of the log is visible, then scrolls down as much as possible to fit the rest of the log onscreen
+    * tries to not unnecessarily scroll the screen
+    */
+    public scrollToMaximizeLog(idx: number) {
+        if(idx < this.scrollLogIdx) {
+            this.scrollLogIdx = idx;
+            this.scrollPosition = 0;
+        }
+        else if(idx === this.scrollLogIdx) {
+            this.scrollPosition = 0;
+        }
+        else {
+            const bottomPosition = this.getBottomPosition();
+            if(!bottomPosition || bottomPosition.idx < idx) {
+                return;
+            }
+
+            this.scrollToLogFromBottom(idx);
+            if(idx === this.scrollLogIdx) {
+                this.scrollPosition = 0;
+            }
+        }
+    }
+
     /** prints the log at the bottom of the screen, and previous logs above. */
     // BUG: not all values highlighted
+    /*
     public printFromBottom(index: number) {
 
         this.logPanel.buffer.fill({char: ' '});
@@ -158,6 +482,7 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
         // this.redrawChildren();
         // this.drawSelf();
     }
+*/
 
     public printIdx(idx: LogIdx, row: number) {
 
@@ -183,15 +508,19 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
         }
 
         if(record.log.timestamp !== undefined) {
-            printOptions.dst.insert('[', {color: messageColor, dim: true});
-            LogDisplayPanel.printHighlightedText(record.log.timestamp, printOptions.dst, LogDisplayPanel.getValueHighlightIndexes(record.idx, 'timestamp', printOptions.matches), {color: messageColor, dim: true}, {color: 'blue'});
-            printOptions.dst.insert(']', {color: messageColor, dim: true});
+            // don't allow dim gray as it becomes the background color
+            const timestampColor = messageColor === 'grey'? 'white' : messageColor;
+            printOptions.dst.insert('[', {color: timestampColor, dim: true});
+            LogDisplayPanel.printHighlightedText(record.log.timestamp, printOptions.dst, LogDisplayPanel.getValueHighlightIndexes(record.idx, 'timestamp', printOptions.matches), {color: timestampColor, dim: true}, {color: 'blue'});
+            printOptions.dst.insert(']', {color: timestampColor, dim: true});
         }
 
         if(record.log.level !== undefined) {
-            printOptions.dst.insert('[', {color: messageColor, dim: true});
-            LogDisplayPanel.printHighlightedText(record.log.level, printOptions.dst, LogDisplayPanel.getValueHighlightIndexes(record.idx, 'level', printOptions.matches), {color: messageColor, dim: true}, {color: 'blue'});
-            printOptions.dst.insert(']', {color: messageColor, dim: true});
+            // don't allow dim gray as it becomes the background color
+            const levelColor = messageColor === 'grey'? 'white' : messageColor;
+            printOptions.dst.insert('[', {color: levelColor, dim: true});
+            LogDisplayPanel.printHighlightedText(record.log.level, printOptions.dst, LogDisplayPanel.getValueHighlightIndexes(record.idx, 'level', printOptions.matches), {color: levelColor, dim: true}, {color: 'blue'});
+            printOptions.dst.insert(']', {color: levelColor, dim: true});
         }
 
         if(record.log.message !== undefined) {
@@ -202,15 +531,15 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
         if(printOptions.expandedView) {
             // copy top-level properties of the log and delete properties we don't want displayed in the expanded view
             // TODO: make this a user configurable whitelist/blacklist
-            const expandedLog = Object.assign({}, record.log);
-            delete expandedLog.level;
-            delete expandedLog.message;
+            // const expandedLog = Object.assign({}, record.log);
+            // delete expandedLog.level;
+            // delete expandedLog.message;
             // delete expandedLog.pid;
-            delete expandedLog.timestamp;
+            // delete expandedLog.timestamp;
 
             printOptions.dst.newLine();
-            linesPrinted += 1;
-            linesPrinted += LogDisplayPanel.printJson(record, expandedLog, printOptions);
+            // linesPrinted += 1;
+            linesPrinted += LogDisplayPanel.printJson(record, record.log, printOptions);
         }
 
         return linesPrinted;
@@ -250,7 +579,7 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
         const highlightPropertyAttr = {color: 'red'};
         const highlightValueAttr = {color: 'blue'};
 
-        let linesPrinted = 0;
+        let linesPrinted = 1;
         let text: string;
 
         // prepare value
@@ -385,5 +714,4 @@ export namespace LogDisplayPanel {
         /** this text is copied once for each level of indent in the exapnded view */
         indentStr: string;
     }
-
 }

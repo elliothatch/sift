@@ -56,8 +56,7 @@ const parser = new Parser();
     display.fuzzyThreshold.draw();
 }
 
-let cursorPause = -1;
-
+let autoscroll = true;
 
 display.commandPanel.setCommands([{
     key: '\\',
@@ -155,53 +154,52 @@ display.terminal.on('key', (name: any, matches: any, data: any) => {
 		}
 		else if(name === 'TAB') {
 		    // TODO: make this per-panel based on focus
-		    display.logDisplayPanel.expandedView = !display.logDisplayPanel.expandedView;
-		    display.logDisplayPanel.logEntryCache.clear();
+		    // display.logDisplayPanel.expandedView = !display.logDisplayPanel.expandedView;
+		    // display.logDisplayPanel.logEntryCache.clear();
             // display.logDisplayPanel.print(0);
             drawLogs();
         }
         else if(name === 'PAGE_UP') {
-            if(cursorPause < 0) {
-                cursorPause = display.logDisplayPanel.logs.length - 22;
-            }
-            else {
-                cursorPause = Math.max(0, cursorPause - 20);
-            }
+            display.logDisplayPanel.moveSelectionUp(20);
+            display.logDisplayPanel.scrollToSelection();
+            autoscroll = false;
             drawLogs();
         }
         else if(name === 'UP') {
-            if(cursorPause < 0) {
-                cursorPause = display.logDisplayPanel.logs.length - 2;
-            }
-            else {
-                cursorPause = Math.max(0, cursorPause - 1);
-            }
+            display.logDisplayPanel.moveSelectionUp(1);
+            display.logDisplayPanel.scrollToSelection();
+            autoscroll = false;
             drawLogs();
         }
         else if(name === 'PAGE_DOWN') {
-            if(cursorPause < 0) {
-                cursorPause = display.logDisplayPanel.logs.length - 1;
-            }
-            else {
-                cursorPause = Math.min(display.logDisplayPanel.logs.length - 1, cursorPause + 20);
-            }
+            display.logDisplayPanel.moveSelectionDown(20);
+            display.logDisplayPanel.scrollToSelection();
+            autoscroll = false;
             drawLogs();
         }
         else if(name === 'DOWN') {
-            if(cursorPause < 0) {
-                cursorPause = display.logDisplayPanel.logs.length - 1;
-            }
-            else {
-                cursorPause = Math.min(display.logDisplayPanel.logs.length - 1, cursorPause + 1);
-            }
+            display.logDisplayPanel.moveSelectionDown(1);
+            display.logDisplayPanel.scrollToSelection();
+            autoscroll = false;
             drawLogs();
         }
         else if(name === 'HOME') {
-            cursorPause = 0;
+            display.logDisplayPanel.selectLog(0);
+            display.logDisplayPanel.scrollToSelection();
+            autoscroll = false;
             drawLogs();
         }
         else if(name === 'END') {
-            cursorPause = -1;
+            display.logDisplayPanel.selectLog(logDisplayPanel.logs.length - 1);
+            display.logDisplayPanel.scrollToSelection();
+            autoscroll = true;
+            drawLogs();
+        }
+        else if(name === 'ENTER') {
+            if(display.logDisplayPanel.toggleExpandSelection()) {
+                display.logDisplayPanel.scrollToMaximizeLog(display.logDisplayPanel.selectionLogIdx);
+            }
+            autoscroll = false;
             drawLogs();
         }
         else if(name === 'LEFT') {
@@ -375,7 +373,6 @@ queryChangedSubject.pipe(
         logDisplayPanel.logEntryCache.clear();
 
         // enable autoscroll and scroll to bottom whenever query is changed
-        cursorPause = -1;
 
         if(expr.length === 0) {
             logDisplayPanel.logs = logdb.logs;
@@ -438,12 +435,13 @@ drawLogsLimiter.pipe(
     filter(() => !blockDrawLog)
 ).subscribe({
     next: () => {
-        if(cursorPause < 0) {
-            logDisplayPanel.printFromBottom(logDisplayPanel.logs.length - 1);
+        if(autoscroll) {
+            logDisplayPanel.scrollToLogFromBottom(logDisplayPanel.logs.length - 1);
+            logDisplayPanel.selectionLogIdx = logDisplayPanel.logs.length - 1;
+            logDisplayPanel.selectionScrollPosition = 0;
         }
-        else {
-            logDisplayPanel.printFromBottom(cursorPause);
-        }
+
+        logDisplayPanel.print();
         logDisplayPanel.redrawChildren();
         logDisplayPanel.draw();
     }

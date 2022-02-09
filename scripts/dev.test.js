@@ -61,11 +61,13 @@ function generateRandomArray(items) {
 	return arr;
 }
 
+idx = 0;
 rxjs.timer(0, logDelay).subscribe((x) => {
 	if(logMode === 0) {
 		freshlog.Log.info(
 			'hi' + String.fromCharCode(65+((x*3)%26)).repeat(4) + String.fromCharCode(65+(((x+1)*5)%26)).repeat(4),
 			{
+				idx: idx++,
 				[String.fromCharCode(85+(x%7))]: x,
 				a: x*x,
 				b: String.fromCharCode(65+(x%10),65+(x%10),65+(x%10)),
