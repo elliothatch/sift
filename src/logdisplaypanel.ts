@@ -225,6 +225,9 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
 
     /** scrolls until there is no empty space at the top or bottom of the list, ensuring as many logs are displayed as possible */
     public scrollAlignBottom() {
+        if(this.scrollLogIndex >= this.logs.length) {
+            return;
+        }
         let bottomPosition = this.getBottomPosition();
         if(!bottomPosition) {
             // scroll up until there is no empty space beneath the log

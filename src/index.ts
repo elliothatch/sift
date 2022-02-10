@@ -297,6 +297,8 @@ merge(
     }),
 ).subscribe({
     next: (record) => {
+        // might be aligning too many times
+        logDisplayPanel.scrollAlignBottom();
         drawLogs();
         drawQueryResult();
     },
@@ -435,12 +437,13 @@ queryChangedSubject.pipe(
                     }
 
                     // scroll
-                    if(displayedLogs.length <= logDisplayPanel.calculatedHeight || !selectionFound) {
+                    if(!selectionFound) {
                         logDisplayPanel.scrollToLogFromBottom(logDisplayPanel.logs.length - 1);
                     }
                     else {
                         // selection has been found, keep it on screen
                         logDisplayPanel.scrollToMaximizeLog(logDisplayPanel.selectionIndex);
+                        logDisplayPanel.scrollAlignBottom();
                     }
                 }
                     /*
@@ -468,15 +471,20 @@ queryChangedSubject.pipe(
                 }
                     */
             }),
+            auditTime(1000/60),
+            tap(() => {
+                drawLogs();
+                drawQueryResult();
+            }),
             // TODO: this is ridiculous
-            auditTime(1000/60),
-            tap(() => drawLogs()),
+            // auditTime(1000/60),
+            // tap(() => drawLogs()),
 
-            publish((published) => merge(
-                interval(1000/60).pipe(takeUntil(concat(published, of(true)))),
-                published)),
-            auditTime(1000/60),
-            tap(() => drawQueryResult()),
+            // publish((published) => merge(
+            //     interval(1000/60).pipe(takeUntil(concat(published, of(true)))),
+            //     published)),
+            // auditTime(1000/60),
+            // tap(() => drawQueryResult()),
         ).subscribe({
             next: () => {
                 // drawLogs();
@@ -510,6 +518,10 @@ drawLogsLimiter.pipe(
         logDisplayPanel.print();
         logDisplayPanel.redrawChildren();
         logDisplayPanel.draw();
+
+        // TODO: we only do this to list the number of hidden logs below
+        // once we move that we won't need to do this anymore
+        drawQueryResult();
     }
 })
 
@@ -531,6 +543,16 @@ drawQueryResultLimiter.pipe(
         }
         (display.queryResults.buffer as any).moveTo(2, 0);
         display.queryResults.buffer.insert(`${logDisplayPanel.logs.length}/${logdb.logs.length}`);
+        display.queryResults.buffer.insert(` `);
+
+        // TODO: do this somewhere else
+        if(display.logDisplayPanel.scrollLogIndex > 0) {
+            display.queryResults.buffer.insert(`[${display.logDisplayPanel.scrollLogIndex} above]`, {dim:true});
+        }
+        const bottomPosition = display.logDisplayPanel.getBottomPosition();
+        if(bottomPosition && bottomPosition.entryIndex < display.logDisplayPanel.logs.length - 1) {
+            display.queryResults.buffer.insert(`[${display.logDisplayPanel.logs.length - 1 - bottomPosition.entryIndex} below]`, {dim:true});
+        }
 
         display.queryResults.draw();
     }
