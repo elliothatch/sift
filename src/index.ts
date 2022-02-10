@@ -196,9 +196,8 @@ display.terminal.on('key', (name: any, matches: any, data: any) => {
             drawLogs();
         }
         else if(name === 'ENTER') {
-            if(display.logDisplayPanel.toggleExpandSelection()) {
-                display.logDisplayPanel.scrollToMaximizeLog(display.logDisplayPanel.selectionIndex);
-            }
+            display.logDisplayPanel.toggleExpandSelection();
+            display.logDisplayPanel.scrollToMaximizeLog(display.logDisplayPanel.selectionIndex);
             autoscroll = false;
             drawLogs();
         }

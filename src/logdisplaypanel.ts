@@ -223,7 +223,42 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
         }
     }
 
-    /** sets scrollLogIdx and scrollPosition so the target log is at the bottom of the screen */
+    /** scrolls until there is no empty space at the top or bottom of the list, ensuring as many logs are displayed as possible */
+    public scrollAlignBottom() {
+        let bottomPosition = this.getBottomPosition();
+        if(!bottomPosition) {
+            // scroll up until there is no empty space beneath the log
+            while(!bottomPosition) {
+                if(this.scrollPosition > 0 || this.scrollLogIndex === 0) {
+                    this.scrollPosition--;
+                }
+                else {
+                    this.scrollLogIndex--;
+                    const record = this.logs[this.scrollLogIndex];
+                    const logEntry = this.getLogEntry(record);
+                    const logHeight = logEntry.getContentSize().height;
+                    this.scrollPosition = logHeight - 1;
+                }
+                bottomPosition = this.getBottomPosition();
+            }
+        }
+        else {
+            // scroll down until as many logs are displayed as possible
+            let entryIdx = bottomPosition.entryIndex;
+            let scrollOffset = bottomPosition.scrollPosition + 1;
+            while(entryIdx && entryIdx < this.logs.length && this.scrollPosition < 0) {
+                const record = this.logs[entryIdx];
+                const logEntry = this.getLogEntry(record);
+                const logHeight = logEntry.getContentSize().height;
+
+                this.scrollPosition = Math.min(0, this.scrollPosition + logHeight - scrollOffset);
+                scrollOffset = 0;
+                entryIdx++;
+            }
+        }
+    }
+
+    /** sets scrollLogIdx and scrollPosition so the target log is at the bottom of the screen. */
     public scrollToLogFromBottom(idx: number) {
         let entryIdx = idx;
         let totalHeight = 0;
@@ -243,10 +278,8 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
 
         this.scrollLogIndex = entryIdx + 1;
         this.scrollPosition = totalHeight - this.logPanel.calculatedHeight;
-        // we only want to allow negative scroll if there is nothing below to display
-        if(this.scrollPosition < 0 && idx < this.logs.length - 1) {
-            this.scrollPosition = 0;
-        }
+
+        this.scrollAlignBottom();
     }
 
     public scrollToLog(idx: number) {
@@ -259,11 +292,7 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
             if(this.scrollPosition > 0) {
                 this.scrollPosition--;
             }
-            else {
-                if(this.scrollLogIndex <= 0) {
-                    return;
-                }
-
+            else if(this.scrollLogIndex > 0) {
                 this.scrollLogIndex--;
                 const record = this.logs[this.scrollLogIndex];
                 const logEntry = this.getLogEntry(record);
@@ -294,28 +323,28 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
     }
 
     /** find the log and scroll index of the bottom entry on the screen. */
-    public getBottomPosition(): {idx: LogIdx, scrollPosition: number} | undefined {
-        let entryIdx = this.scrollLogIndex;
+    public getBottomPosition(): {entryIndex: number, scrollPosition: number} | undefined {
+        let entryIndex = this.scrollLogIndex;
 
         let totalHeight = -this.scrollPosition;
         let lastLogHeight = 0;
 
         while(totalHeight < this.logPanel.calculatedHeight) {
-            if(entryIdx >= this.logs.length) {
+            if(entryIndex >= this.logs.length) {
                 // you can't scroll past the end of the list
                 return undefined;
             }
 
-            const record = this.logs[entryIdx];
+            const record = this.logs[entryIndex];
             const logEntry = this.getLogEntry(record);
             lastLogHeight = logEntry.getContentSize().height;
 
             totalHeight += lastLogHeight;
-            entryIdx++;
+            entryIndex++;
         }
 
         return {
-            idx: entryIdx - 1,
+            entryIndex: entryIndex - 1,
             scrollPosition: lastLogHeight - (totalHeight - this.logPanel.calculatedHeight) - 1
         };
     }
@@ -335,13 +364,13 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
             if(!bottomPosition) {
                 return;
             }
-            if(this.selectionIndex > bottomPosition.idx) {
+            if(this.selectionIndex > bottomPosition.entryIndex) {
                 this.scrollToLogFromBottom(this.selectionIndex);
                 // scrollToLogFromBottom will scroll to the end of the log if its expanded, but we want to be at the beginning of the log as if we scrolled down from above
                 const selectedLogHeight = this.getLogEntry(this.logs[this.selectionIndex]).getContentSize().height;
                 this.scrollUp(selectedLogHeight - 1 - this.selectionScrollPosition);
             }
-            else if(this.selectionIndex === bottomPosition.idx
+            else if(this.selectionIndex === bottomPosition.entryIndex
                 && this.selectionScrollPosition > bottomPosition.scrollPosition) {
                 this.scrollDown(this.selectionScrollPosition - bottomPosition.scrollPosition);
             }
@@ -406,23 +435,27 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
 
 
     /**
-* @returns true if the log was expanded, and false if it was collapsed
+* @returns true if the log was expanded, and false if it was collapsed, or selection is invalid 
 */
     public toggleExpandSelection(): boolean {
-        if(this.expandedLogs.has(this.selectionIndex)) {
-            this.expandedLogs.delete(this.selectionIndex);
-            this.selectionScrollPosition = 0;
-            this.logEntryCache.delete(this.selectionIndex);
+        if(this.selectionIndex >= this.logs.length) {
+            return false;
+        }
 
-            if(this.selectionIndex === this.scrollLogIndex) {
-                // prevent invalid scroll position
-                this.scrollPosition = 0;
-            }
+        const idx = this.logs[this.selectionIndex].idx;
+        if(this.expandedLogs.has(idx)) {
+            this.expandedLogs.delete(idx);
+            this.selectionScrollPosition = 0;
+
+            // prevent invalid scroll position
+            // this.scrollPosition = 0;
+
+            this.logEntryCache.delete(idx);
             return false;
         }
         else {
-            this.expandedLogs.add(this.selectionIndex);
-            this.logEntryCache.delete(this.selectionIndex);
+            this.expandedLogs.add(idx);
+            this.logEntryCache.delete(idx);
             return true;
         }
 
@@ -432,24 +465,21 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
     * ensures the beginning of the log is visible, then scrolls down as much as possible to fit the rest of the log onscreen
     * tries to not unnecessarily scroll the screen
     */
-    public scrollToMaximizeLog(idx: number) {
-        if(idx < this.scrollLogIndex) {
-            this.scrollLogIndex = idx;
+    public scrollToMaximizeLog(entryIndex: number) {
+        if(entryIndex < this.scrollLogIndex) {
+            this.scrollLogIndex = entryIndex;
             this.scrollPosition = 0;
         }
-        else if(idx === this.scrollLogIndex) {
+        else if(entryIndex === this.scrollLogIndex) {
             this.scrollPosition = 0;
+            this.scrollAlignBottom();
         }
         else {
             const bottomPosition = this.getBottomPosition();
-            if(!bottomPosition || bottomPosition.idx >= idx) {
-                return;
+            if(bottomPosition && bottomPosition.entryIndex <= entryIndex) {
+                this.scrollToLogFromBottom(entryIndex);
             }
-
-            this.scrollToLogFromBottom(idx);
-            if(idx === this.scrollLogIndex) {
-                this.scrollPosition = 0;
-            }
+            this.scrollAlignBottom();
         }
     }
 
