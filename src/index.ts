@@ -197,7 +197,7 @@ display.terminal.on('key', (name: any, matches: any, data: any) => {
         }
         else if(name === 'ENTER') {
             if(display.logDisplayPanel.toggleExpandSelection()) {
-                display.logDisplayPanel.scrollToMaximizeLog(display.logDisplayPanel.selectionLogIdx);
+                display.logDisplayPanel.scrollToMaximizeLog(display.logDisplayPanel.selectionIndex);
             }
             autoscroll = false;
             drawLogs();
@@ -368,14 +368,33 @@ queryChangedSubject.pipe(
             spinnerEnabled = false;
         }
 
+        // if autoscroll is disabled, the user has selected a log, and we would like to keep that log in view while filtering occurs
+        const selectedLog = !autoscroll && logDisplayPanel.selectionIndex < logDisplayPanel.logs.length? logDisplayPanel.logs[logDisplayPanel.selectionIndex]: undefined;
+        const selectedLogScrollPosition = logDisplayPanel.selectionScrollPosition;
+
+        if(!selectedLog) {
+            // turn on autoscroll if we couldn't find the selected log
+            autoscroll = true;
+        }
+
+        let selectionFound = false;
+
+        logDisplayPanel.selectionIndex = 0;
+        logDisplayPanel.scrollPosition = 0;
+
         logDisplayPanel.resultSet = undefined;
 
+        // changing the query collapses all logs
+        // logDisplayPanel.expandedLogs.clear();
         logDisplayPanel.logEntryCache.clear();
-
-        // enable autoscroll and scroll to bottom whenever query is changed
 
         if(expr.length === 0) {
             logDisplayPanel.logs = logdb.logs;
+            if(selectedLog) {
+                logDisplayPanel.selectionIndex = selectedLog.idx;
+                logDisplayPanel.selectionScrollPosition = selectedLogScrollPosition;
+                logDisplayPanel.scrollToSelection();
+            }
             drawLogs();
             drawQueryResult();
             return;
@@ -400,7 +419,55 @@ queryChangedSubject.pipe(
                 if(!logDisplayPanel.resultSet) {
                     logDisplayPanel.resultSet = resultSet;
                 }
-                insertSorted(record, displayedLogs, (a, b) => a.idx - b.idx);
+                const insertIndex = insertSorted(record, displayedLogs, (a, b) => a.idx - b.idx);
+                // TODO: what if autoscrolling is diabled mid-filter?
+                // TODO: what if selection is changed mid-filter?
+                if(!autoscroll) {
+                    // set the selection to the correct log
+                    if(!selectionFound) {
+                        if(selectedLog && selectedLog.idx === record.idx) {
+                            logDisplayPanel.selectionIndex = insertIndex;
+                            logDisplayPanel.selectionScrollPosition = selectedLogScrollPosition;
+                            selectionFound = true;
+                        }
+                    }
+                    else if(insertIndex <= logDisplayPanel.selectionIndex) {
+                        logDisplayPanel.selectionIndex++;
+                    }
+
+                    // scroll
+                    if(displayedLogs.length <= logDisplayPanel.calculatedHeight || !selectionFound) {
+                        logDisplayPanel.scrollToLogFromBottom(logDisplayPanel.logs.length - 1);
+                    }
+                    else {
+                        // selection has been found, keep it on screen
+                        logDisplayPanel.scrollToMaximizeLog(logDisplayPanel.selectionIndex);
+                    }
+                }
+                    /*
+                if(displayedLogs.length <= logDisplayPanel.calculatedHeight) {
+                        logDisplayPanel.scrollToLogFromBottom(logDisplayPanel.logs.length - 1);
+                }
+                if(!selectionFound) {
+                    if(selectedLog && selectedLog.idx === record.idx) {
+                        logDisplayPanel.selectionIndex = insertIndex;
+                        logDisplayPanel.selectionScrollPosition = selectedLogScrollPosition;
+                        logDisplayPanel.scrollToMaximizeLog(logDisplayPanel.selectionIndex);
+                        selectionFound = true;
+                    }
+                    else {
+                        logDisplayPanel.scrollToLogFromBottom(logDisplayPanel.logs.length - 1);
+                        logDisplayPanel.selectionIndex = logDisplayPanel.logs.length - 1;
+                        logDisplayPanel.selectionScrollPosition = 0;
+                    }
+                }
+                else {
+                    if(insertIndex <= logDisplayPanel.selectionIndex) {
+                        logDisplayPanel.selectionIndex++;
+                        logDisplayPanel.scrollToMaximizeLog(logDisplayPanel.selectionIndex);
+                    }
+                }
+                    */
             }),
             // TODO: this is ridiculous
             auditTime(1000/60),
@@ -437,7 +504,7 @@ drawLogsLimiter.pipe(
     next: () => {
         if(autoscroll) {
             logDisplayPanel.scrollToLogFromBottom(logDisplayPanel.logs.length - 1);
-            logDisplayPanel.selectionLogIdx = logDisplayPanel.logs.length - 1;
+            logDisplayPanel.selectionIndex = logDisplayPanel.logs.length - 1;
             logDisplayPanel.selectionScrollPosition = 0;
         }
 
