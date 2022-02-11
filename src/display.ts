@@ -146,6 +146,14 @@ export class Display {
             this.rootPanel.options.width = width;
             this.rootPanel.options.height = height;
             this.rootPanel.resize();
+
+            // TODO: we need to make an abstract "print" function for panels
+            // that will forcably clear and reprint the entire panel
+            // otherwise, we get weird artifacts when resizing
+            // we will have to isolate all the drawing calls we stuck randomly
+            // around index.ts into panel code
+            this.logDisplayPanel.logEntryCache.clear();
+            this.logDisplayPanel.print();
             this.draw();
         });
     }
