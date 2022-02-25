@@ -367,6 +367,10 @@ export class Parser {
                 }
 
                 const rhs  = this.stack.pop()
+                if(!rhs) {
+                    // the query ended before we got a rhs expression
+                    return lhs;
+                }
 
                 return {
                     eType: token.tType,

@@ -269,6 +269,10 @@ const queries: Array<{input: string, expected: Parse.Expression[]}> = [{
             expr: valueExpr('error'),
         }
     }],
+}, {
+    // trailing space shouldn't create an unsatisfiable AND condition
+    input: 'error ',
+    expected: [valueExpr('error')],
 }];
 
 describe('query', () => {

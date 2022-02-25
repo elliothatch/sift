@@ -58,7 +58,7 @@ export class LogStreamPanel<T extends LogStream> extends Panel<ScreenBuffer> {
         });
 
         const titleText = this.logStream.source.sType === 'observable'? this.logStream.source.name:
-            `${this.logStream.source.process.spawnfile} ${this.logStream.source.process.spawnargs.join(' ')} (${this.logStream.source.process.pid})`;
+            `${this.logStream.source.process.spawnargs.join(' ')} (${this.logStream.source.process.pid})`;
 
         this.titlePanel.buffer.insert(titleText);
 
@@ -222,6 +222,11 @@ export class LogStreamPanel<T extends LogStream> extends Panel<ScreenBuffer> {
             }
         };
 
+        if(this.filter && JSON.stringify(filter) === JSON.stringify(this.filter)) {
+            // if the new filter is the same as the old one, don't do anything
+            return undefined;
+        }
+
         return this.setFilter(filter);
     }
 
@@ -232,6 +237,8 @@ export class LogStreamPanel<T extends LogStream> extends Panel<ScreenBuffer> {
             this.filterSubscription = undefined;
             this.spinnerIndex = -1;
         }
+
+        this.filter = filter;
 
         // if autoscroll is disabled, the user has selected a log, and we would like to keep that log in view while filtering occurs
         const selectedLog = !this.autoscroll && this.logDisplayPanel.selectionIndex < this.logDisplayPanel.logs.length? this.logDisplayPanel.logs[this.logDisplayPanel.selectionIndex]: undefined;
@@ -288,8 +295,8 @@ export class LogStreamPanel<T extends LogStream> extends Panel<ScreenBuffer> {
                     this.logDisplayPanel.resultSet = resultSet;
                 }
                 const insertIndex = insertSorted(record, displayedLogs, (a, b) => a.idx - b.idx);
-                // TODO: what if autoscrolling is diabled mid-filter?
-                // TODO: what if selection is changed mid-filter?
+                // TODO: what if autoscrolling is changed mid-filter?
+                // TODO: if the selection is changed mid-filter, we get screen flickering, and then the selection is reset back to the previous selection if it was found, which might not be desirable
                 if(!this.autoscroll) {
                     // set the selection to the correct log
                     if(!selectionFound) {
