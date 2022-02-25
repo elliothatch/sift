@@ -12,25 +12,9 @@ import { Panel } from './panel';
 import { LogDb, LogRecord, LogIndex, ResultSet, FilterMatch } from './logdb';
 import { Parse, Parser } from './query';
 import { Command } from './commandpanel';
+import { LogStream } from './logstream';
 
 const exitLogs: Array<{level?: string, message: any}> = [];
-
-interface Process {
-    process: ChildProcess;
-    running: boolean;
-    stdoutInterface: Interface;
-    stderrInterface: Interface;
-}
-
-function createProcess(execPath: string, params: string[]): Process {
-    const targetProcess = spawn(execPath, params);
-    return {
-        process: targetProcess,
-        running: true,
-        stdoutInterface: createInterface({input: targetProcess.stdout}),
-        stderrInterface: createInterface({input: targetProcess.stderr}),
-    };
-}
 
 if(process.argv.length <= 2) {
     console.log('Usage: sift <exec> [...execParams]');
@@ -44,27 +28,28 @@ display.init();
 const logdb = new LogDb();
 const parser = new Parser();
 
+const processStream = LogStream.fromProcess(process.argv[2], process.argv.slice(3));
+const processLogStreamPanel = display.addLogStreamPanel(processStream);
+processLogStreamPanel.options.drawCursor = true;
 
-{
-    const fuzzyThresholdStr = Math.log10(-logdb.fuzzysortThreshold).toString();
-    (display.fuzzyThreshold.buffer as any).setText('');
-    (display.fuzzyThreshold.buffer as any).moveTo(
-        display.fuzzyThreshold.calculatedWidth - fuzzyThresholdStr.length,
-        0
-    );
-    display.fuzzyThreshold.buffer.insert(fuzzyThresholdStr);
-    display.fuzzyThreshold.draw();
-}
-
-let autoscroll = true;
+// {
+//     const fuzzyThresholdStr = Math.log10(-logdb.fuzzysortThreshold).toString();
+//     (display.fuzzyThreshold.buffer as any).setText('');
+//     (display.fuzzyThreshold.buffer as any).moveTo(
+//         display.fuzzyThreshold.calculatedWidth - fuzzyThresholdStr.length,
+//         0
+//     );
+//     display.fuzzyThreshold.buffer.insert(fuzzyThresholdStr);
+//     display.fuzzyThreshold.draw();
+// }
 
 display.commandPanel.setCommands([{
     key: '\\',
     description: 'insert \\',
     action: (key, matches, data) => {
         exitCommandMode();
-        display.queryPanel.buffer.insert(key);
-        display.queryPanel.draw();
+        processLogStreamPanel.queryPromptInputPanel.buffer.insert(key);
+        processLogStreamPanel.queryPromptInputPanel.draw();
         onQueryChanged();
     }
 }, {
@@ -93,6 +78,19 @@ enum CommandMode {
 };
 
 let commandMode: CommandMode = CommandMode.QUERY;
+
+const drawLogs = () => {
+    processLogStreamPanel.logDisplayPanel.print();
+    processLogStreamPanel.printQueryResults();
+    processLogStreamPanel.redrawChildren();
+    processLogStreamPanel.draw();
+};
+
+processLogStreamPanel.redrawEvents.subscribe(() => {
+    processLogStreamPanel.redrawChildren();
+    processLogStreamPanel.draw();
+});
+
 
 display.terminal.on('key', (name: any, matches: any, data: any) => {
 	try {
@@ -129,9 +127,9 @@ display.terminal.on('key', (name: any, matches: any, data: any) => {
             }
         }
 		else if(name === 'CTRL_C') {
-			if(targetProcess.running) {
-                logdb.ingest(JSON.stringify({level: 'warn', message: `Sending SIGTERM to child process "${targetProcess.process.spawnfile}" (${targetProcess.process.pid})`}));
-			    targetProcess.process.kill();
+			if(processStream.source.running) {
+                processStream.logdb.ingest(JSON.stringify({level: 'warn', message: `Sending SIGTERM to child process "${processStream.source.process.spawnfile}" (${processStream.source.process.pid})`}));
+			    processLogStreamPanel.logStream.source.process.kill();
             }
             else {
                 close();
@@ -141,110 +139,110 @@ display.terminal.on('key', (name: any, matches: any, data: any) => {
             enterCommandMode();
         }
 		else if(name === 'BACKSPACE') {
-			display.queryPanel.buffer.backDelete(1);
+			processLogStreamPanel.queryPromptInputPanel.buffer.backDelete(1);
 			// filterLogs(queryTextBuffer.getText());
-			display.queryPanel.draw();
+			processLogStreamPanel.queryPromptInputPanel.draw();
 			onQueryChanged();
 		}
 		else if(name === 'DELETE') {
-			display.queryPanel.buffer.delete(1);
+			processLogStreamPanel.queryPromptInputPanel.buffer.delete(1);
 			// filterLogs(queryTextBuffer.getText());
-			display.queryPanel.draw();
+			processLogStreamPanel.queryPromptInputPanel.draw();
 			onQueryChanged();
 		}
 		else if(name === 'TAB') {
 		    // TODO: make this per-panel based on focus
-		    // display.logDisplayPanel.expandedView = !display.logDisplayPanel.expandedView;
-		    // display.logDisplayPanel.logEntryCache.clear();
-            // display.logDisplayPanel.print(0);
+		    // processLogStreamPanel.logDisplayPanel.expandedView = !processLogStreamPanel.logDisplayPanel.expandedView;
+		    // processLogStreamPanel.logDisplayPanel.logEntryCache.clear();
+            // processLogStreamPanel.logDisplayPanel.print(0);
             drawLogs();
         }
         else if(name === 'PAGE_UP') {
-            display.logDisplayPanel.moveSelectionUp(20);
-            display.logDisplayPanel.scrollToSelection();
-            autoscroll = false;
+            processLogStreamPanel.logDisplayPanel.moveSelectionUp(20);
+            processLogStreamPanel.logDisplayPanel.scrollToSelection();
+            processLogStreamPanel.autoscroll = false;
             drawLogs();
         }
         else if(name === 'UP') {
-            display.logDisplayPanel.moveSelectionUp(1);
-            display.logDisplayPanel.scrollToSelection();
-            autoscroll = false;
+            processLogStreamPanel.logDisplayPanel.moveSelectionUp(1);
+            processLogStreamPanel.logDisplayPanel.scrollToSelection();
+            processLogStreamPanel.autoscroll = false;
             drawLogs();
         }
         else if(name === 'PAGE_DOWN') {
-            display.logDisplayPanel.moveSelectionDown(20);
-            display.logDisplayPanel.scrollToSelection();
-            autoscroll = false;
+            processLogStreamPanel.logDisplayPanel.moveSelectionDown(20);
+            processLogStreamPanel.logDisplayPanel.scrollToSelection();
+            processLogStreamPanel.autoscroll = false;
             drawLogs();
         }
         else if(name === 'DOWN') {
-            display.logDisplayPanel.moveSelectionDown(1);
-            display.logDisplayPanel.scrollToSelection();
-            autoscroll = false;
+            processLogStreamPanel.logDisplayPanel.moveSelectionDown(1);
+            processLogStreamPanel.logDisplayPanel.scrollToSelection();
+            processLogStreamPanel.autoscroll = false;
             drawLogs();
         }
         else if(name === 'HOME') {
-            display.logDisplayPanel.selectLog(0);
-            display.logDisplayPanel.scrollToSelection();
-            autoscroll = false;
+            processLogStreamPanel.logDisplayPanel.selectLog(0);
+            processLogStreamPanel.logDisplayPanel.scrollToSelection();
+            processLogStreamPanel.autoscroll = false;
             drawLogs();
         }
         else if(name === 'END') {
-            display.logDisplayPanel.selectLog(logDisplayPanel.logs.length - 1);
-            display.logDisplayPanel.scrollToSelection();
-            autoscroll = true;
+            processLogStreamPanel.logDisplayPanel.selectLog(processLogStreamPanel.logDisplayPanel.logs.length - 1);
+            processLogStreamPanel.logDisplayPanel.scrollToSelection();
+            processLogStreamPanel.autoscroll = true;
             drawLogs();
         }
         else if(name === 'ENTER') {
-            display.logDisplayPanel.toggleExpandSelection();
-            display.logDisplayPanel.scrollToMaximizeLog(display.logDisplayPanel.selectionIndex);
-            autoscroll = false;
+            processLogStreamPanel.logDisplayPanel.toggleExpandSelection();
+            processLogStreamPanel.logDisplayPanel.scrollToMaximizeLog(processLogStreamPanel.logDisplayPanel.selectionIndex);
+            processLogStreamPanel.autoscroll = false;
             drawLogs();
         }
         else if(name === 'LEFT') {
-            display.queryPanel.buffer.moveBackward(false);
-            display.queryPanel.draw();
+            processLogStreamPanel.queryPromptInputPanel.buffer.moveBackward(false);
+            processLogStreamPanel.queryPromptInputPanel.draw();
         }
         else if(name === 'RIGHT') {
-            if((display.queryPanel.buffer as any).cx < display.queryPanel.buffer.getText().length) {
-                display.queryPanel.buffer.moveForward(false);
-                display.queryPanel.draw();
+            if((processLogStreamPanel.queryPromptInputPanel.buffer as any).cx < processLogStreamPanel.queryPromptInputPanel.buffer.getText().length) {
+                processLogStreamPanel.queryPromptInputPanel.buffer.moveForward(false);
+                processLogStreamPanel.queryPromptInputPanel.draw();
             }
         }
 		else if(name === 'ESCAPE') {
 
-            (display.queryPanel.buffer as any).setText('');
-            (display.queryPanel.buffer as any).moveTo(0, 0);
-			display.queryPanel.draw();
+            (processLogStreamPanel.queryPromptInputPanel.buffer as any).setText('');
+            (processLogStreamPanel.queryPromptInputPanel.buffer as any).moveTo(0, 0);
+			processLogStreamPanel.queryPromptInputPanel.draw();
 			onQueryChanged();
         }
         else if(name === 'SHIFT_UP') {
-            logdb.fuzzysortThreshold = Math.floor(logdb.fuzzysortThreshold * 10);
-            const fuzzyThresholdStr = Math.log10(-logdb.fuzzysortThreshold).toString();
-			(display.fuzzyThreshold.buffer as any).setText('');
-			(display.fuzzyThreshold.buffer as any).moveTo(
-			    display.fuzzyThreshold.calculatedWidth - fuzzyThresholdStr.length,
-			    0
-			);
-            display.fuzzyThreshold.buffer.insert(fuzzyThresholdStr);
-            display.fuzzyThreshold.draw();
-            onQueryChanged();
+            // logdb.fuzzysortThreshold = Math.floor(logdb.fuzzysortThreshold * 10);
+            // const fuzzyThresholdStr = Math.log10(-logdb.fuzzysortThreshold).toString();
+			// (display.fuzzyThreshold.buffer as any).setText('');
+			// (display.fuzzyThreshold.buffer as any).moveTo(
+			    // display.fuzzyThreshold.calculatedWidth - fuzzyThresholdStr.length,
+			    // 0
+			// );
+            // display.fuzzyThreshold.buffer.insert(fuzzyThresholdStr);
+            // display.fuzzyThreshold.draw();
+            // onQueryChanged();
         }
         else if(name === 'SHIFT_DOWN') {
-            logdb.fuzzysortThreshold = Math.min(-1, logdb.fuzzysortThreshold / 10);
-            const fuzzyThresholdStr = Math.log10(-logdb.fuzzysortThreshold).toString();
-			(display.fuzzyThreshold.buffer as any).setText('');
-			(display.fuzzyThreshold.buffer as any).moveTo(
-			    display.fuzzyThreshold.calculatedWidth - fuzzyThresholdStr.length,
-			    0
-			);
-            display.fuzzyThreshold.buffer.insert(fuzzyThresholdStr);
-            display.fuzzyThreshold.draw();
-            onQueryChanged();
+            // logdb.fuzzysortThreshold = Math.min(-1, logdb.fuzzysortThreshold / 10);
+            // const fuzzyThresholdStr = Math.log10(-logdb.fuzzysortThreshold).toString();
+			// (display.fuzzyThreshold.buffer as any).setText('');
+			// (display.fuzzyThreshold.buffer as any).moveTo(
+			    // display.fuzzyThreshold.calculatedWidth - fuzzyThresholdStr.length,
+			    // 0
+			// );
+            // display.fuzzyThreshold.buffer.insert(fuzzyThresholdStr);
+            // display.fuzzyThreshold.draw();
+            // onQueryChanged();
         }
         else if(data.isCharacter) {
-            display.queryPanel.buffer.insert(name);
-            display.queryPanel.draw();
+            processLogStreamPanel.queryPromptInputPanel.buffer.insert(name);
+            processLogStreamPanel.queryPromptInputPanel.draw();
             // TODO: create special class/functions LogPanel, that allow adding/removing/setting logs, scrolling, and display options like expanded
             // try {
 			onQueryChanged();
@@ -260,311 +258,22 @@ display.terminal.on('key', (name: any, matches: any, data: any) => {
 
 display.draw();
 
-let expr: Parse.Expression[] = [];
-
-const logDisplayPanel = display.logDisplayPanel;
-logDisplayPanel.logs = logdb.logs;
-
-const targetProcess = createProcess(process.argv[2], process.argv.slice(3));
-
-targetProcess.process.on('exit', (code, signal) => {
-    targetProcess.running = false;
-    // TODO: show these logs in a separate "sift messages" panel
-    logdb.ingest(JSON.stringify({level: 'warn', message: `Child process "${targetProcess.process.spawnfile}" (${targetProcess.process.pid}) exited with ${code != null? 'code "' + code + '"': 'signal "' + signal + '"'}`}));
-    logdb.ingest(JSON.stringify({level: 'info', message: `Press CTRL_C to close sift`}));
-    drawLogs();
-    drawQueryResult();
-});
-
-merge(
-    fromEvent<string>(targetProcess.stdoutInterface, 'line').pipe(map((line) => logdb.ingest(line))),
-    fromEvent<string>(targetProcess.stderrInterface, 'line').pipe(map((line) => logdb.ingest(line, 'error'))),
-).pipe(
-    // true return = redraw
-    tap((record) => {
-        if(logDisplayPanel.logs === logdb.logs || expr.length === 0) {
-            return;
-        }
-
-        const matches = logdb.matchLog(expr[0], record);
-
-        if(matches.length > 0) {
-            logDisplayPanel.logs.push(record);
-            if(logDisplayPanel.resultSet) {
-                matches.forEach((match) => ResultSet.addMatch(match, logDisplayPanel.resultSet!));
-            }
-        }
-    }),
-).subscribe({
-    next: (record) => {
-        // might be aligning too many times
-        logDisplayPanel.scrollAlignBottom();
-        drawLogs();
-        drawQueryResult();
-    },
-    complete: () => {
-        // drawLogs();
-        // drawQueryResult();
-    },
-});
-
-const spinner = ['\\', '|', '/', '--'];
-let spinnerEnabled = false;
-let spinnerIndex = 0;
-
-let blockDrawLog = false;
-
-let filterSubscription: Subscription | undefined = undefined;
-
 const queryChangedSubject = new Subject();
 function onQueryChanged() {
     queryChangedSubject.next(null);
 }
 
-const queryUpdateDelay = 100;
-
 queryChangedSubject.pipe(
     debounceTime(150),
-    tap(() => {
-        const query = display.queryPanel.buffer.getText();
-        try {
-            expr = parser.parse(query);
-        }
-        catch(err) {
-            // TODO: show user reason their query is invalid
-            return;
-        }
-
-        // apply rules from FILTER panel
-        const filterExpr: Parse.Expression | undefined = display.filterPanel.rules
-            .filter((rule) => rule.enabled && rule.expr)
-            .reduce((filter, rule) => {
-                if(!filter) {
-                    return rule.expr;
-                }
-
-                return {
-                    eType: 'OR',
-                    lhs: rule.expr,
-                    rhs: filter
-                };
-        }, undefined as Parse.Expression | undefined);
-
-        if(filterExpr) {
-            if(expr.length === 0) {
-                expr = [filterExpr];
-            }
-            else {
-                expr[0] = {
-                    eType: 'AND',
-                    lhs: expr[0],
-                    rhs: filterExpr
-                };
-            }
-        };
-
-        if(filterSubscription) {
-            filterSubscription.unsubscribe();
-            filterSubscription = undefined;
-            spinnerEnabled = false;
-        }
-
-        // if autoscroll is disabled, the user has selected a log, and we would like to keep that log in view while filtering occurs
-        const selectedLog = !autoscroll && logDisplayPanel.selectionIndex < logDisplayPanel.logs.length? logDisplayPanel.logs[logDisplayPanel.selectionIndex]: undefined;
-        const selectedLogScrollPosition = logDisplayPanel.selectionScrollPosition;
-
-        if(!selectedLog) {
-            // turn on autoscroll if we couldn't find the selected log
-            autoscroll = true;
-        }
-
-        let selectionFound = false;
-
-        logDisplayPanel.selectionIndex = 0;
-        logDisplayPanel.scrollPosition = 0;
-
-        logDisplayPanel.resultSet = undefined;
-
-        // changing the query collapses all logs
-        // logDisplayPanel.expandedLogs.clear();
-        logDisplayPanel.logEntryCache.clear();
-
-        if(expr.length === 0) {
-            logDisplayPanel.logs = logdb.logs;
-            if(selectedLog) {
-                logDisplayPanel.selectionIndex = selectedLog.idx;
-                logDisplayPanel.selectionScrollPosition = selectedLogScrollPosition;
-                logDisplayPanel.scrollToSelection();
-            }
-            drawLogs();
-            drawQueryResult();
-            return;
-        }
-
-        spinnerEnabled = true;
-        blockDrawLog = true;
-        drawQueryResult();
-
-        /** store logs in reverse order so we can easily iterate from the latest entry */
-        // const displayedLogs: SkipList<LogIdx, LogRecord> = new SkipList((a: number, b: number) => b - a);
-        const displayedLogs: LogRecord[] = [];
-        logDisplayPanel.logs = displayedLogs;
-
-
-        filterSubscription = merge(
-            logdb.filterAll(expr[0]),
-            // below prevents annoying visual flicker when starting search
-            interval(1000/60).pipe(take(1), tap(() => blockDrawLog = false), mergeMap(() => EMPTY)),
-        ).pipe(
-            tap(({record, matches, resultSet}) => {
-                if(!logDisplayPanel.resultSet) {
-                    logDisplayPanel.resultSet = resultSet;
-                }
-                const insertIndex = insertSorted(record, displayedLogs, (a, b) => a.idx - b.idx);
-                // TODO: what if autoscrolling is diabled mid-filter?
-                // TODO: what if selection is changed mid-filter?
-                if(!autoscroll) {
-                    // set the selection to the correct log
-                    if(!selectionFound) {
-                        if(selectedLog && selectedLog.idx === record.idx) {
-                            logDisplayPanel.selectionIndex = insertIndex;
-                            logDisplayPanel.selectionScrollPosition = selectedLogScrollPosition;
-                            selectionFound = true;
-                        }
-                    }
-                    else if(insertIndex <= logDisplayPanel.selectionIndex) {
-                        logDisplayPanel.selectionIndex++;
-                    }
-
-                    // scroll
-                    if(!selectionFound) {
-                        logDisplayPanel.scrollToLogFromBottom(logDisplayPanel.logs.length - 1);
-                    }
-                    else {
-                        // selection has been found, keep it on screen
-                        logDisplayPanel.scrollToMaximizeLog(logDisplayPanel.selectionIndex);
-                        logDisplayPanel.scrollAlignBottom();
-                    }
-                }
-                    /*
-                if(displayedLogs.length <= logDisplayPanel.calculatedHeight) {
-                        logDisplayPanel.scrollToLogFromBottom(logDisplayPanel.logs.length - 1);
-                }
-                if(!selectionFound) {
-                    if(selectedLog && selectedLog.idx === record.idx) {
-                        logDisplayPanel.selectionIndex = insertIndex;
-                        logDisplayPanel.selectionScrollPosition = selectedLogScrollPosition;
-                        logDisplayPanel.scrollToMaximizeLog(logDisplayPanel.selectionIndex);
-                        selectionFound = true;
-                    }
-                    else {
-                        logDisplayPanel.scrollToLogFromBottom(logDisplayPanel.logs.length - 1);
-                        logDisplayPanel.selectionIndex = logDisplayPanel.logs.length - 1;
-                        logDisplayPanel.selectionScrollPosition = 0;
-                    }
-                }
-                else {
-                    if(insertIndex <= logDisplayPanel.selectionIndex) {
-                        logDisplayPanel.selectionIndex++;
-                        logDisplayPanel.scrollToMaximizeLog(logDisplayPanel.selectionIndex);
-                    }
-                }
-                    */
-            }),
-            auditTime(1000/60),
-            tap(() => {
-                drawLogs();
-                drawQueryResult();
-            }),
-            // TODO: this is ridiculous
-            // auditTime(1000/60),
-            // tap(() => drawLogs()),
-
-            // publish((published) => merge(
-            //     interval(1000/60).pipe(takeUntil(concat(published, of(true)))),
-            //     published)),
-            // auditTime(1000/60),
-            // tap(() => drawQueryResult()),
-        ).subscribe({
-            next: () => {
-                // drawLogs();
-                // drawQueryResult();
-            },
-            complete: () => {
-                spinnerEnabled = false;
-                drawLogs();
-                drawQueryResult();
-            },
-        });
-    })
 ).subscribe({
     next: () => {
+        processLogStreamPanel.setQuery((processLogStreamPanel.queryPromptInputPanel.buffer as any).getText());
     }
 });
-
-const drawLogsLimiter = new Subject();
-
-drawLogsLimiter.pipe(
-    auditTime(1000/60),
-    filter(() => !blockDrawLog)
-).subscribe({
-    next: () => {
-        if(autoscroll) {
-            logDisplayPanel.scrollToLogFromBottom(logDisplayPanel.logs.length - 1);
-            logDisplayPanel.selectionIndex = logDisplayPanel.logs.length - 1;
-            logDisplayPanel.selectionScrollPosition = 0;
-        }
-
-        logDisplayPanel.print();
-        logDisplayPanel.redrawChildren();
-        logDisplayPanel.draw();
-
-        // TODO: we only do this to list the number of hidden logs below
-        // once we move that we won't need to do this anymore
-        drawQueryResult();
-    }
-})
-
-function drawLogs() {
-    drawLogsLimiter.next(null);
-}
-
-const drawQueryResultLimiter = new Subject();
-
-drawQueryResultLimiter.pipe(
-    auditTime(1000/60)
-).subscribe({
-    next: () => {
-        (display.queryResults.buffer as any).setText('');
-        if(spinnerEnabled) {
-            (display.queryResults.buffer as any).moveTo(0, 0);
-            display.queryResults.buffer.insert(spinner[spinnerIndex]);
-            spinnerIndex = (spinnerIndex + 1) % spinner.length;
-        }
-        (display.queryResults.buffer as any).moveTo(2, 0);
-        display.queryResults.buffer.insert(`${logDisplayPanel.logs.length}/${logdb.logs.length}`);
-        display.queryResults.buffer.insert(` `);
-
-        // TODO: do this somewhere else
-        if(display.logDisplayPanel.scrollLogIndex > 0) {
-            display.queryResults.buffer.insert(`[${display.logDisplayPanel.scrollLogIndex} above]`, {dim:true});
-        }
-        const bottomPosition = display.logDisplayPanel.getBottomPosition();
-        if(bottomPosition && bottomPosition.entryIndex < display.logDisplayPanel.logs.length - 1) {
-            display.queryResults.buffer.insert(`[${display.logDisplayPanel.logs.length - 1 - bottomPosition.entryIndex} below]`, {dim:true});
-        }
-
-        display.queryResults.draw();
-    }
-});
-
-function drawQueryResult() {
-    drawQueryResultLimiter.next(null);
-}
 
 function close() {
     display.terminal.fullscreen(false);
-    targetProcess.process.kill();
+    processLogStreamPanel.logStream.source.process.kill();
     exitLogs.forEach(({level, message}) => {
         if(level === 'error') {
             console.error(message);
@@ -574,20 +283,6 @@ function close() {
         }
     });
     process.exit();
-}
-
-// TODO: use binary search
-function insertSorted<T>(t: T, arr: Array<T>, comparator: (a: T, b: T) => number): number {
-    for(let i = 0; i < arr.length; i++) {
-        const result = comparator(arr[i], t);
-        if(result >= 0) {
-            arr.splice(i, 0, t);
-            return i;
-        }
-    }
-
-    arr.push(t);
-    return arr.length - 1;
 }
 
 function enterCommandMode() {

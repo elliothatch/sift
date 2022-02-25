@@ -1,8 +1,7 @@
-import {Readable} from 'stream';
 import * as fuzzysort from 'fuzzysort';
 
-import { concat, EMPTY, from, merge, Observable, Subject, of, forkJoin, timer, defer } from 'rxjs';
-import { map, mergeMap, filter, toArray, tap, delay } from 'rxjs/operators';
+import { concat, EMPTY, Observable, Subject } from 'rxjs';
+import { delay } from 'rxjs/operators';
 
 import { Parse } from './query';
 
