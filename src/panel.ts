@@ -55,7 +55,7 @@ export abstract class Panel<T extends Buffer> {
             return false;
         }
 
-        this.children.splice(childIndex);
+        this.children.splice(childIndex, 1);
         child.parent = undefined;
 
         // child.getScreenBuffer().dst = undefined;

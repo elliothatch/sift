@@ -1,4 +1,5 @@
 import {terminal, Terminal, Buffer, ScreenBuffer, TextBuffer} from 'terminal-kit';
+import { Subscription } from 'rxjs';
 
 import { LogStream } from './logstream';
 
@@ -18,8 +19,13 @@ export class Display {
     public commandPanel: CommandPanel;
     public filterPanel: FilterPanel;
 
+    public logStreamPanels: {panel: LogStreamPanel, redrawSubscription: Subscription}[];
+    public logStreamPanelIndex: number = 0;
+
     constructor(term?: Terminal) {
         this.terminal = term || terminal;
+
+        this.logStreamPanels = [];
 
         this.rootPanel = new ScreenPanel(this.terminal, {
             name: 'root',
@@ -103,19 +109,18 @@ export class Display {
         this.rootPanel.redrawChildren();
     }
 
-    public addLogStreamPanel<T extends LogStream>(logStream: T): LogStreamPanel<T> {
-        const logStreamPanel = new LogStreamPanel(this.logPanel.buffer, {
-            name: `log.logStream.${this.logPanel.children.length}}`,
-            width: 1,
-            height: 1,
-            flex: {
-                width: true,
-                height: true,
-            },
-        }, logStream);
+    public showLogStreamPanel(panel: LogStreamPanel) {
+        this.logStreamPanels.push({
+            panel,
+            redrawSubscription: panel.redrawEvents.subscribe(() => {
+                panel.redrawChildren();
+                panel.draw();
+            })
+        });
 
-        this.logPanel.addChild(logStreamPanel);
-        this.rootPanel.resize();
+        panel.options.drawCursor = true;
+        this.logPanel.addChild(panel);
+        this.logPanel.resize();
 
         this.logPanel.children.forEach((logDisplayPanel) => {
             if(logDisplayPanel instanceof LogDisplayPanel) {
@@ -125,8 +130,56 @@ export class Display {
         });
 
         this.draw();
+    }
 
-        return logStreamPanel;
+    public hideLogStreamPanel(panel: LogStreamPanel): boolean {
+        const panelIndex = this.logStreamPanels.findIndex((p) => p.panel === panel);
+        if(panelIndex === -1) {
+            return false;
+        }
+
+        this.logStreamPanels[panelIndex].redrawSubscription.unsubscribe();
+        panel.options.drawCursor = false;
+
+        this.logStreamPanels.splice(panelIndex, 1);
+        this.logPanel.removeChild(panel);
+
+        this.logPanel.resize();
+
+        if(panelIndex === this.logStreamPanelIndex) {
+            panel.selected = false;
+            panel.printTitle();
+
+            this.logStreamPanelIndex = Math.max(0, Math.min(this.logStreamPanels.length - 1, panelIndex));
+            const newPanel = this.logStreamPanels[this.logStreamPanelIndex].panel;
+            newPanel.selected = true;
+            newPanel.printTitle();
+        }
+
+        this.logPanel.children.forEach((logDisplayPanel) => {
+            if(logDisplayPanel instanceof LogDisplayPanel) {
+                logDisplayPanel.logEntryCache.clear();
+                logDisplayPanel.print();
+            }
+        });
+        this.draw();
+        return true;
+    }
+
+    public selectLogStreamPanel(index: number) {
+        if(this.logStreamPanels.length > 0) {
+            const prevPanel = this.logStreamPanels[this.logStreamPanelIndex].panel;
+            this.logStreamPanelIndex = Math.max(0, Math.min(this.logStreamPanels.length - 1, index));
+            const newPanel = this.logStreamPanels[this.logStreamPanelIndex].panel;
+
+            prevPanel.selected = false;
+            prevPanel.printTitle();
+
+            newPanel.selected = true;
+            newPanel.printTitle();
+
+            this.draw();
+        }
     }
 
     public showCommandPanel() {

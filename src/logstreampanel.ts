@@ -10,7 +10,7 @@ import { Panel, ScreenPanel, TextPanel } from './panel';
 import { LogDisplayPanel } from './logdisplaypanel';
 import { FilterPanel } from './filterpanel';
 
-export class LogStreamPanel<T extends LogStream> extends Panel<ScreenBuffer> {
+export class LogStreamPanel<T extends LogStream = LogStream> extends Panel<ScreenBuffer> {
     public logStream: T;
     public query: string = '';
     public filter?: Parse.Expression;
@@ -26,12 +26,13 @@ export class LogStreamPanel<T extends LogStream> extends Panel<ScreenBuffer> {
 
     protected filterSubscription?: Subscription;
 
-    protected titlePanel: TextPanel;
     public logDisplayPanel: LogDisplayPanel
     protected queryResultsPanel: TextPanel;
     protected queryPromptPanel: ScreenPanel;
     protected queryPromptArrowPanel: ScreenPanel;
     public queryPromptInputPanel: TextPanel;
+    protected titlePanel: TextPanel;
+    public selected: boolean = false;
 
     /** current frame of the spinner animation. if -1, spinner is hidden */
     protected spinnerIndex: number = -1;
@@ -47,20 +48,6 @@ export class LogStreamPanel<T extends LogStream> extends Panel<ScreenBuffer> {
 
         this.logStream = logStream;
         this.parser = new Parser;
-
-        this.titlePanel = new TextPanel(this.buffer, {
-            name: `${this.options.name? this.options.name: ''}.titlePanel`,
-            width: 1,
-            height: 1,
-            flex: {
-                width: true,
-            },
-        });
-
-        const titleText = this.logStream.source.sType === 'observable'? this.logStream.source.name:
-            `${this.logStream.source.process.spawnargs.join(' ')} (${this.logStream.source.process.pid})`;
-
-        this.titlePanel.buffer.insert(titleText);
 
         this.logDisplayPanel = new LogDisplayPanel(this.buffer, {
             name: `${this.options.name? this.options.name: ''}.logDisplayPanel`,
@@ -113,10 +100,21 @@ export class LogStreamPanel<T extends LogStream> extends Panel<ScreenBuffer> {
         this.queryPromptPanel.addChild(this.queryPromptArrowPanel);
         this.queryPromptPanel.addChild(this.queryPromptInputPanel);
 
-        this.addChild(this.titlePanel);
+        this.titlePanel = new TextPanel(this.buffer, {
+            name: `${this.options.name? this.options.name: ''}.titlePanel`,
+            width: 1,
+            height: 1,
+            flex: {
+                width: true,
+            },
+        });
+
+        this.printTitle();
+
         this.addChild(this.logDisplayPanel);
         this.addChild(this.queryResultsPanel);
         this.addChild(this.queryPromptPanel);
+        this.addChild(this.titlePanel);
 
         this.logDisplayPanel.logs = this.logStream.logdb.logs;
 
@@ -160,6 +158,22 @@ export class LogStreamPanel<T extends LogStream> extends Panel<ScreenBuffer> {
 
     public getScreenBuffer(): ScreenBuffer {
         return this.buffer;
+    }
+
+    public printTitle() {
+        (this.titlePanel.buffer as any).setText('');
+        (this.titlePanel.buffer as any).moveTo(0, 0);
+        const titleText = this.logStream.source.sType === 'observable'? this.logStream.source.name:
+            `${this.logStream.source.process.spawnargs.join(' ')} (${this.logStream.source.process.pid})`;
+
+        const fullTitleText = titleText + ' '.repeat(Math.max(0, this.calculatedWidth - titleText.length));
+
+        if(this.selected) {
+            this.titlePanel.buffer.insert(fullTitleText, {inverse: true});
+        }
+        else {
+            this.titlePanel.buffer.insert(fullTitleText);
+        }
     }
 
     public printQueryResults() {
