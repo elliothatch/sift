@@ -24,8 +24,11 @@ export class LogStream<T extends LogStream.Source<K> = LogStream.Source<any>, K 
         this.logsObservable = this.logsSubject.asObservable();
     }
 
-    public static fromProcess(execPath: string, params: string[]): LogStream<LogStream.Source.Process > {
-        const targetProcess = spawn(execPath, params);
+    /** @param params - argments passed to the process. if omitted, execPath is treated as the exec and argments, and the process is spawned in a shell to parse the args */
+    public static fromProcess(execPath: string, params?: string[]): LogStream<LogStream.Source.Process > {
+        const targetProcess = params?
+            spawn(execPath, params):
+            spawn(execPath, [], {shell: true});
         const source: LogStream.Source.Process = {
             sType: 'process',
             process: targetProcess,
@@ -71,7 +74,7 @@ export class LogStream<T extends LogStream.Source<K> = LogStream.Source<any>, K 
                 message: `Child source "${targetProcess.spawnfile}" (${targetProcess.pid}) exited with ${code != null? 'code "' + code + '"': 'signal "' + signal + '"'}`
             }));
             logStream.logdb.ingest(JSON.stringify({
-                level: 'warn', message: `Press CTRL_C to close sift`
+                level: 'warn', message: `Press CTRL_C to close`
             }));
         });
 

@@ -1,6 +1,6 @@
 import { Terminal, Buffer, ScreenBuffer } from 'terminal-kit';
 import { EMPTY, interval, merge, Observable, Subject, Subscription } from 'rxjs';
-import { auditTime, filter, mergeMap, take, tap } from 'rxjs/operators';
+import { auditTime, filter, finalize, mergeMap, take, tap } from 'rxjs/operators';
 
 import { LogRecord, ResultSet } from './logdb';
 import { LogStream } from './logstream';
@@ -121,6 +121,18 @@ export class LogStreamPanel<T extends LogStream = LogStream> extends Panel<Scree
             auditTime(1000/60),
             filter(() => !this.blockDrawLog),
             tap(() => {
+                if(this.autoscroll) {
+                    this.logDisplayPanel.scrollToLogFromBottom(this.logDisplayPanel.logs.length - 1);
+                    this.logDisplayPanel.selectionIndex = Math.max(0, this.logDisplayPanel.logs.length - 1);
+                    this.logDisplayPanel.selectionScrollPosition = 0;
+                }
+                else {
+                    // might be aligning too many times
+                    this.logDisplayPanel.scrollAlignBottom();
+                }
+            }),
+            finalize(() => {
+                // make sure the scroll position is correct if the stream is terminated
                 if(this.autoscroll) {
                     this.logDisplayPanel.scrollToLogFromBottom(this.logDisplayPanel.logs.length - 1);
                     this.logDisplayPanel.selectionIndex = Math.max(0, this.logDisplayPanel.logs.length - 1);

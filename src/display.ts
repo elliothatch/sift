@@ -168,13 +168,16 @@ export class Display {
             const newPanel = this.logStreamPanels[this.logStreamPanelIndex].panel;
             newPanel.setSelected(true);
         }
+        else if(panelIndex < this.logStreamPanelIndex) {
+            this.logStreamPanelIndex -= 1;
+        }
 
         // all panels were marked dirty by resize
         return true;
     }
 
     public selectLogStreamPanel(index: number) {
-        if(this.logStreamPanels.length > 0) {
+        if(this.logStreamPanels.length > 1) {
             const prevPanel = this.logStreamPanels[this.logStreamPanelIndex].panel;
             this.logStreamPanelIndex = Math.max(0, Math.min(this.logStreamPanels.length - 1, index));
             const newPanel = this.logStreamPanels[this.logStreamPanelIndex].panel;
