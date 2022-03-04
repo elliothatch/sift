@@ -23,7 +23,6 @@ export namespace LogRecord {
     }
 
     export function index(logValue: any, propertyPrefixes?: string[], idx?: Index): Index {
-        // TODO: index arrays and object values themselves, rather than just their children (support query specific values in array, object structures
         if(!propertyPrefixes) {
             propertyPrefixes = [];
         }
@@ -42,19 +41,11 @@ export namespace LogRecord {
 
         // index values
         if(Array.isArray(logValue)) {
-            logValue.forEach((v) => {
-                const value =
-                    v === null? 'null':
-                    v === undefined? 'undefined':
-                    v.toString();
-
-                let valueProperties = idx!.values.get(value);
-                if(!valueProperties) {
-                    valueProperties = new Set();
-                }
-
-                valueProperties.add(propertyId);
-                idx!.values.set(value, valueProperties);
+            logValue.forEach((v, i) => {
+                // index with just the property so we get broad matches on this property
+                // nevermind, fuzzy match makes this work when including the index
+                // index(v, propertyPrefixes!.concat([]), idx!);
+                index(v, propertyPrefixes!.concat([i.toString()]), idx!);
             });
         }
         else if (typeof logValue !== 'object' || logValue == undefined) {

@@ -109,7 +109,8 @@ rxjs.timer(0, logDelay).subscribe((x) => {
 			man: {
 				name: 'bob',
 				roadsWalkedDown: Math.floor(Math.random()*10000),
-				[randomString(10)]: messageNouns[Math.floor(Math.random()*messageNouns.length)] 
+				[randomString(10)]: messageNouns[Math.floor(Math.random()*messageNouns.length)] ,
+				children: ['alice', 'charlie', ['diego', 'elliot']]
 			},
 			isYes: Math.random() < 0.5? true: false,
 		}

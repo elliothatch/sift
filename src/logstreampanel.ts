@@ -145,9 +145,21 @@ export class LogStreamPanel<T extends LogStream = LogStream> extends Panel<Scree
 
             if(matches.length > 0) {
                 this.logDisplayPanel.logs.push(record);
-                if(this.logDisplayPanel.resultSet) {
-                    matches.forEach((match) => ResultSet.addMatch(match, this.logDisplayPanel.resultSet!));
+                if(!this.logDisplayPanel.resultSet) {
+                    this.logDisplayPanel.resultSet = {
+                        matches: new Map(),
+                        index: {
+                            propertyIndex: new Map(),
+                            properties: [],
+                            valueIndex: new Map(),
+                            values: [],
+                        }
+                    };
                 }
+                matches.forEach((match) => {
+                    ResultSet.addMatch(match, this.logDisplayPanel.resultSet!)
+                    this.logDisplayPanel.logEntryCache.delete(match.logRecord.idx);
+                });
 
                 this.logDisplayPanel.markDirty();
                 this.queryResultsPanel.markDirty();
@@ -279,7 +291,12 @@ export class LogStreamPanel<T extends LogStream = LogStream> extends Panel<Scree
         this.logDisplayPanel.selectionIndex = 0;
         this.logDisplayPanel.scrollPosition = 0;
 
-        this.logDisplayPanel.resultSet = undefined;
+        if(this.logDisplayPanel.resultSet) {
+            for(let idx of this.logDisplayPanel.resultSet.matches.keys()) {
+                this.logDisplayPanel.logEntryCache.delete(idx);
+            }
+            this.logDisplayPanel.resultSet = undefined;
+        }
 
         // changing the query collapses all logs
         // logDisplayPanel.expandedLogs.clear();
@@ -321,8 +338,22 @@ export class LogStreamPanel<T extends LogStream = LogStream> extends Panel<Scree
         ).pipe(
             tap(({record, matches, resultSet}) => {
                 if(!this.logDisplayPanel.resultSet) {
-                    this.logDisplayPanel.resultSet = resultSet;
+                    this.logDisplayPanel.resultSet = {
+                        matches: new Map(),
+                        index: {
+                            propertyIndex: new Map(),
+                            properties: [],
+                            valueIndex: new Map(),
+                            values: [],
+                        }
+                    };
                 }
+
+                matches.forEach((match) => {
+                    ResultSet.addMatch(match, this.logDisplayPanel.resultSet!)
+                    this.logDisplayPanel.logEntryCache.delete(match.logRecord.idx);
+                });
+
                 const insertIndex = insertSorted(record, displayedLogs, (a, b) => a.idx - b.idx);
                 // TODO: what if autoscrolling is changed mid-filter?
                 // TODO: if the selection is changed mid-filter, we get screen flickering, and then the selection is reset back to the previous selection if it was found, which might not be desirable
