@@ -1,4 +1,4 @@
-import { Subject } from 'rxjs';
+import { from, Subject } from 'rxjs';
 import { debounceTime } from 'rxjs/operators';
 
 import { Display } from './display';
@@ -118,7 +118,7 @@ export class Sift {
         this.currentLogStreamPanel = panel;
     }
 
-    public terimnateProcess(logStream: LogStream<LogStream.Source.Process>) {
+    public terminateProcess(logStream: LogStream<LogStream.Source.Process>) {
         if(logStream.source.running) {
             logStream.logdb.ingest(JSON.stringify({
                 level: 'warn',
@@ -145,6 +145,22 @@ export class Sift {
             }
         });
         process.exit();
+    }
+
+    protected updateFilterPanel(logStreamPanel: LogStreamPanel) {
+        Object.values(this.display.filterPanel.rules).forEach((rule) => {
+            rule.enabled = false;
+        });
+        Object.entries(logStreamPanel.filterRules).forEach(([key, rule]) => {
+            const globalRule = this.display.filterPanel.rules[key];
+            // if the rule hasn't been edited, update its enabled state
+            // this probably isn't necessary
+            if(globalRule && rule.query === globalRule.query) {
+                globalRule.enabled = rule.enabled;
+            }
+        });
+
+        this.display.filterPanel.markDirty();
     }
 
     public onQueryChanged() {
@@ -177,8 +193,8 @@ export class Sift {
 
     public actions = {
         [Input.Mode.Query]: asActions({
-            'terimnateProcessOrClose': {
-                description: 'Terminate process. If all processes are terminated, close sift',
+            'closeLogStream': {
+                description: 'Close log stream or exit. If the stream is a running process, it is sent a SIGTERM signal. If the process is already ended, close the log window. If there are no more log windows, exit sift',
                 fn: () => {
                     const runningProcesses = this.logStreams.reduce((count, stream) => {
                         if(stream.stream.source.sType === 'process' && stream.stream.source.running) {
@@ -194,7 +210,7 @@ export class Sift {
                         const logSource = this.currentLogStreamPanel.logStream.source;
                         if(logSource.sType === 'process') {
                             if(logSource.running) {
-                                this.terimnateProcess(this.currentLogStreamPanel.logStream as LogStream<LogStream.Source.Process>);
+                                this.terminateProcess(this.currentLogStreamPanel.logStream as LogStream<LogStream.Source.Process>);
                                 this.display.draw();
                             }
                             else {
@@ -204,7 +220,29 @@ export class Sift {
                             }
                         }
                         else {
-                            this.siftLogsSubject.next(`Cannot close sift: ${runningProcesses} processes still running`);
+                            if(logSource.subscription && this.currentLogStreamPanel.logStream !== this.siftLogStream) {
+                                logSource.subscription.unsubscribe();
+                                logSource.subscription = undefined
+                                this.currentLogStreamPanel.logStream.logsSubject.next(
+                                    this.currentLogStreamPanel.logStream.logdb.ingest(JSON.stringify({
+                                    level: 'warn',
+                                    message: `Unsubscribing...`
+                                    }))
+                                );
+                                this.currentLogStreamPanel.logStream.logsSubject.next(
+                                    this.currentLogStreamPanel.logStream.logdb.ingest(JSON.stringify({
+                                    level: 'warn',
+                                    message: `Press CTRL_C to close`
+                                    }))
+                                );
+                                this.currentLogStreamPanel.markDirty();
+                                this.display.draw();
+                            }
+                            else {
+                                this.display.hideLogStreamPanel(this.currentLogStreamPanel);
+                                this.currentLogStreamPanel = this.display.logStreamPanels[this.display.logStreamPanelIndex].panel;
+                                this.display.draw();
+                            }
                         }
                     }
                 }
@@ -398,6 +436,42 @@ export class Sift {
                         this.display.draw();
                     });
                 }
+            },
+            'displayHelp': {
+                description: 'display help',
+                fn: (key, matches, data) => {
+
+                    const helpText: string[] = [
+                        'Welcome to sift, the interactive log filter.',
+                        '',
+                        'Key bindings:',
+                        ...Object.entries(this.bindings).reduce((text, [mode, bindings]) => {
+                            text.push(`${Input.Mode[parseInt(mode) as Input.Mode]}:`)
+                            Object.entries(bindings).forEach(([key, action]) => {
+                                text.push(`   ${key + ' '.repeat(12 - key.length)} ${action.description}`);
+                            });
+                            return text;
+                        }, [] as string[])
+                    ];
+                    const logStream = LogStream.fromObservable('sift help',
+                        from(helpText)
+                    );
+                    const panel = new LogStreamPanel(this.display.logPanel.buffer, {
+                        name: `sift-help`,
+                        width: 1,
+                        height: 1,
+                        flex: {
+                            width: true,
+                            height: true,
+                        },
+                    }, logStream);
+
+                    this.display.showLogStreamPanel(panel);
+                    this.display.selectLogStreamPanel(this.display.logStreamPanels.length - 1);
+                    this.currentLogStreamPanel = panel;
+                    this.actions[Input.Mode.Command].exitCommandMode.fn(key, matches, data);
+                    this.display.draw();
+                }
             }
         }),
         [Input.Mode.Filter]: asActions({
@@ -406,6 +480,7 @@ export class Sift {
                 fn: () => {
                     this.input.mode = Input.Mode.Filter;
                     this.display.hideCommandPanel();
+                    this.updateFilterPanel(this.currentLogStreamPanel);
                     this.display.showFilterPanel();
                     this.display.draw();
                 }
@@ -415,6 +490,22 @@ export class Sift {
                 fn: () => {
                     this.input.mode = Input.Mode.Query;
                     this.display.hideFilterPanel();
+                    this.display.draw();
+                }
+            },
+            'selectPanelLeft': {
+                description: 'Move panel selection left',
+                fn: (key, matches, data) => {
+                    this.actions[Input.Mode.Query].selectPanelLeft.fn(key, matches, data);
+                    this.updateFilterPanel(this.currentLogStreamPanel);
+                    this.display.draw();
+                }
+            },
+            'selectPanelRight': {
+                description: 'Move panel selection right',
+                fn: (key, matches, data) => {
+                    this.actions[Input.Mode.Query].selectPanelRight.fn(key, matches, data);
+                    this.updateFilterPanel(this.currentLogStreamPanel);
                     this.display.draw();
                 }
             }
@@ -478,7 +569,7 @@ export class Sift {
                 }
             },
             'delete': {
-                description: 'Forward delete the query',
+                description: 'Forward delete the text',
                 fn: () => {
                     this.display.textInputPanel.buffer.delete(1);
                     this.display.textInputPanel.markDirty();
@@ -490,7 +581,7 @@ export class Sift {
 
     public bindings: {[mode in Input.Mode]: {[key: string]: Input.Action}} = {
         [Input.Mode.Query]: {
-            'CTRL_C': this.actions[Input.Mode.Query].terimnateProcessOrClose,
+            'CTRL_C': this.actions[Input.Mode.Query].closeLogStream,
             'CTRL_LEFT': this.actions[Input.Mode.Query].selectPanelLeft,
             'CTRL_H': this.actions[Input.Mode.Query].selectPanelLeft,
             'CTRL_RIGHT': this.actions[Input.Mode.Query].selectPanelRight,
@@ -519,6 +610,10 @@ export class Sift {
             'CTRL_C': this.actions[Input.Mode.Filter].exitFilterMode,
             'ESCAPE': this.actions[Input.Mode.Filter].exitFilterMode,
             'BACKSPACE': this.actions[Input.Mode.Filter].exitFilterMode,
+            'CTRL_LEFT': this.actions[Input.Mode.Filter].selectPanelLeft,
+            'CTRL_H': this.actions[Input.Mode.Filter].selectPanelLeft,
+            'CTRL_RIGHT': this.actions[Input.Mode.Filter].selectPanelRight,
+            'CTRL_L': this.actions[Input.Mode.Filter].selectPanelRight,
         },
         [Input.Mode.Text]: {
             'CTRL_C': this.actions[Input.Mode.Text].cancelText,
@@ -545,6 +640,9 @@ export class Sift {
         }, {
             key: 's',
             action: this.actions[Input.Mode.Command].spawnProcess,
+        }, {
+            key: '?',
+            action: this.actions[Input.Mode.Command].displayHelp,
         }];
 
     protected handleQueryInput = (name: string, matches: string[], data: any) => {
@@ -578,43 +676,56 @@ export class Sift {
             const rule = this.display.filterPanel.rules[name];
             if(rule) {
                 rule.enabled = !rule.enabled;
-                this.display.filterPanel.markDirty();
-                this.currentLogStreamPanel.filterRules = Object.values(this.display.filterPanel.rules);
+                this.currentLogStreamPanel.filterRules[name] = {...rule};
                 this.currentLogStreamPanel.setQuery((this.currentLogStreamPanel.queryPromptInputPanel.buffer as any).getText());
+
+                this.display.filterPanel.markDirty();
                 this.display.draw();
             }
         }
         else if(data.code >= 65 && data.code <= 90) {
             // uppercase alphabet
             // edit or create a rule
+            const key = name.toLowerCase();
             const onCancel = () => {
                 this.input.mode = Input.Mode.Filter;
                 (this.display.terminal as any).hideCursor(true);
                 this.display.draw();
             };
-            const rule = this.display.filterPanel.rules[name.toLowerCase()];
+            const rule = this.display.filterPanel.rules[key];
             if(rule) {
                 // edit
-                this.promptTextInput(`Edit filter '${name.toLowerCase()}' (name)`, (filterName) => {
+                this.promptTextInput(`Edit filter '${key}' (name)`, (filterName) => {
                     if(filterName === '') {
                         onCancel();
                         return;
                     }
-                    this.promptTextInput(`Edit filter '${name.toLowerCase()}' (query)`, (query) => {
+                    this.promptTextInput(`Edit filter '${key}' (query)`, (query) => {
                         if(query === '') {
                             onCancel();
                             return;
                         }
-                        this.display.filterPanel.setRule(name.toLowerCase(), {
+                        const rule = {
                             enabled: true,
                             name: filterName,
                             query
-                        });
+                        };
+                        this.display.filterPanel.setRule(key, rule);
                         this.input.mode = Input.Mode.Filter;
                         (this.display.terminal as any).hideCursor(true);
                         this.display.filterPanel.markDirty();
-                        this.currentLogStreamPanel.filterRules = Object.values(this.display.filterPanel.rules);
-                        this.currentLogStreamPanel.setQuery((this.currentLogStreamPanel.queryPromptInputPanel.buffer as any).getText());
+
+                        // we need to update all log stream panels that had this rule applied
+                        this.logStreams.forEach((logStream) => {
+                            const panelRule = logStream.panel.filterRules[key];
+                            if(panelRule && panelRule.enabled) {
+                                logStream.panel.filterRules[key] = {...rule};
+                                logStream.panel.setQuery((logStream.panel.queryPromptInputPanel.buffer as any).getText());
+                                logStream.panel.markDirty();
+
+                            }
+                        });
+
                         this.display.draw();
                     },
                         onCancel,
@@ -626,25 +737,26 @@ export class Sift {
             }
             else {
                 // create
-                this.promptTextInput(`New filter '${name.toLowerCase()}' (name)`, (filterName) => {
+                this.promptTextInput(`New filter '${key}' (name)`, (filterName) => {
                     if(filterName === '') {
                         onCancel();
                         return;
                     }
-                    this.promptTextInput(`New filter '${name.toLowerCase()}' (query)`, (query) => {
+                    this.promptTextInput(`New filter '${key}' (query)`, (query) => {
                         if(query === '') {
                             onCancel();
                             return;
                         }
-                        this.display.filterPanel.setRule(name.toLowerCase(), {
+                        const rule = {
                             enabled: true,
                             name: filterName,
                             query
-                        });
+                        };
+                        this.display.filterPanel.setRule(key, rule);
                         this.input.mode = Input.Mode.Filter;
                         (this.display.terminal as any).hideCursor(true);
                         this.display.filterPanel.markDirty();
-                        this.currentLogStreamPanel.filterRules = Object.values(this.display.filterPanel.rules);
+                        this.currentLogStreamPanel.filterRules[key] = {...rule};
                         this.currentLogStreamPanel.setQuery((this.currentLogStreamPanel.queryPromptInputPanel.buffer as any).getText());
                         this.display.draw();
                     }, onCancel);

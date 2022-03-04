@@ -1,6 +1,6 @@
 import { spawn, ChildProcess } from 'child_process';
 import { createInterface, Interface } from 'readline';
-import { of, merge, fromEvent, Observable, Subject } from 'rxjs';
+import { of, merge, finalize, fromEvent, Observable, Subject, Subscription } from 'rxjs';
 import { map } from 'rxjs/operators';
 
 import { LogDb, LogRecord } from './logdb';
@@ -13,7 +13,7 @@ export class LogStream<T extends LogStream.Source<K> = LogStream.Source<any>, K 
 
     /** emits each log after it is parsed and ingested */
     public logsObservable: Observable<LogRecord>;
-    protected logsSubject: Subject<LogRecord>;
+    public logsSubject: Subject<LogRecord>;
 
     constructor(source: T) {
         this.buffer = [];
@@ -90,7 +90,16 @@ export class LogStream<T extends LogStream.Source<K> = LogStream.Source<any>, K 
 
         const logStream = new LogStream(source);
 
-        observable.subscribe({
+        const subscription = observable.pipe(
+            finalize(() => {
+                logStream.logsSubject.next(logStream.logdb.ingest(JSON.stringify({
+                    level: 'warn', message: `END`
+                })));
+                logStream.logsSubject.next(logStream.logdb.ingest(JSON.stringify({
+                    level: 'warn', message: `Press CTRL_C to close`
+                })));
+            }),
+        ).subscribe({
             next: (data) => {
                 if(typeof data === 'string') {
                     const record = logStream.logdb.ingest(data);
@@ -117,6 +126,8 @@ export class LogStream<T extends LogStream.Source<K> = LogStream.Source<any>, K 
             }
         });
 
+        logStream.source.subscription = subscription;
+
         return logStream;
     }
 
@@ -132,6 +143,7 @@ export namespace LogStream {
             sType: 'observable';
             name: string;
             observable: Observable<T>;
+            subscription?: Subscription;
         }
         export interface Process {
             sType: 'process';

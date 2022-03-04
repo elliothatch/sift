@@ -14,7 +14,7 @@ export class LogStreamPanel<T extends LogStream = LogStream> extends Panel<Scree
     public logStream: T;
     public query: string = '';
     public filter?: Parse.Expression;
-    public filterRules: FilterPanel.Rule[] = [];
+    public filterRules: {[key: string]: FilterPanel.Rule} = {};
     public autoscroll: boolean = true;
 
     protected blockDrawLog: boolean = false;
@@ -246,8 +246,8 @@ export class LogStreamPanel<T extends LogStream = LogStream> extends Panel<Scree
 
         // apply rules from FILTER panel
         const filterExpr: Parse.Expression | undefined =
-        this.filterRules.filter((rule) => rule.enabled && rule.expr)
-        .reduce((filter, rule) => {
+        Object.entries(this.filterRules).filter(([key, rule]) => rule.enabled && rule.expr)
+        .reduce((filter, [key, rule]) => {
             if(!filter) {
                 return rule.expr;
             }
