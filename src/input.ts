@@ -12,8 +12,13 @@ export class Input {
         this.display = display;
         this.handlers = handlers;
 
-        this.display.terminal.on('key', (name: any, matches: any, data: any) => {
+        this.display.terminal.on('key', (name: string, matches: string[], data: any) => {
             const handler = this.handlers[this.mode];
+            // exceptions: some keys match multiple combinations. if the terminal is able to distinguish the key combination, it will be available in matches.
+            // here we override name if there is a more specific match available we want to use
+            if(name === 'BACKSPACE' && matches.includes('CTRL_H')) {
+                name = 'CTRL_H';
+            }
             if(handler.bindings[name]) {
                 handler.bindings[name].fn(name, matches, data);
             }
@@ -41,6 +46,6 @@ export namespace Input {
         /** bindings handles a single keypress */
         bindings: {[key: string]: Action};
         /** if no binding is defined for the pressed key, fallback is called with args directly from terminal.on('key') */
-        fallback?: (name: any, matches: any, data: any) => void;
+        fallback?: (name: string, matches: string[], data: any) => void;
     }
 }

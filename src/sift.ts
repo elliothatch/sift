@@ -231,6 +231,7 @@ export class Sift {
                 fn: () => {
                     this.currentLogStreamPanel.logDisplayPanel.toggleExpandSelection();
                     this.currentLogStreamPanel.logDisplayPanel.scrollToMaximizeLog(this.currentLogStreamPanel.logDisplayPanel.selectionIndex);
+                    this.currentLogStreamPanel.autoscroll = false;
                     this.currentLogStreamPanel.queryResultsPanel.markDirty();
                     this.display.draw();
                 }
@@ -391,7 +392,9 @@ export class Sift {
                 fn: () => {
                     this.display.hideCommandPanel();
                     this.promptTextInput('spawn process', (text) => {
-                        this.spawnProcess(text);
+                        if(text.length > 0) {
+                            this.spawnProcess(text);
+                        }
                         this.display.draw();
                     });
                 }
@@ -544,14 +547,14 @@ export class Sift {
             action: this.actions[Input.Mode.Command].spawnProcess,
         }];
 
-    protected handleQueryInput = (name: any, matches: any, data: any) => {
+    protected handleQueryInput = (name: string, matches: string[], data: any) => {
         if(data.isCharacter) {
             this.currentLogStreamPanel.queryPromptInputPanel.buffer.insert(name);
             this.onQueryChanged();
         }
     };
 
-    protected handleCommandInput = (name: any, matches: any, data: any) => {
+    protected handleCommandInput = (name: string, matches: string[], data: any) => {
         this.display.commandPanel.commands.forEach((command) => {
             if(name === command.key) {
                 command.action.fn(name, matches, data);
@@ -559,7 +562,7 @@ export class Sift {
         });
     };
 
-    protected handleTextInput = (name: any, matches: any, data: any) => {
+    protected handleTextInput = (name: string, matches: string[], data: any) => {
         if(data.isCharacter) {
             this.display.textInputPanel.buffer.insert(name);
             this.display.textInputPanel.markDirty();
@@ -567,7 +570,7 @@ export class Sift {
         }
     };
 
-    protected handleFilterInput = (name: string, matches: any, data: any) => {
+    protected handleFilterInput = (name: string, matches: string[], data: any) => {
         // TODO: make rules for each logstream independent
         if(data.code >= 97 && data.code <= 122) {
             // lowercase alphabet
@@ -593,7 +596,15 @@ export class Sift {
             if(rule) {
                 // edit
                 this.promptTextInput(`Edit filter '${name.toLowerCase()}' (name)`, (filterName) => {
+                    if(filterName === '') {
+                        onCancel();
+                        return;
+                    }
                     this.promptTextInput(`Edit filter '${name.toLowerCase()}' (query)`, (query) => {
+                        if(query === '') {
+                            onCancel();
+                            return;
+                        }
                         this.display.filterPanel.setRule(name.toLowerCase(), {
                             enabled: true,
                             name: filterName,
@@ -616,7 +627,15 @@ export class Sift {
             else {
                 // create
                 this.promptTextInput(`New filter '${name.toLowerCase()}' (name)`, (filterName) => {
+                    if(filterName === '') {
+                        onCancel();
+                        return;
+                    }
                     this.promptTextInput(`New filter '${name.toLowerCase()}' (query)`, (query) => {
+                        if(query === '') {
+                            onCancel();
+                            return;
+                        }
                         this.display.filterPanel.setRule(name.toLowerCase(), {
                             enabled: true,
                             name: filterName,

@@ -191,6 +191,7 @@ export class LogStreamPanel<T extends LogStream = LogStream> extends Panel<Scree
 
     public setSelected(selected: boolean) {
         this.selected = selected;
+        this.options.drawCursor = selected;
         this.titlePanel.markDirty();
     }
 

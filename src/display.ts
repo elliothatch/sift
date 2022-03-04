@@ -142,7 +142,6 @@ export class Display {
             })
         });
 
-        panel.options.drawCursor = true;
         this.logPanel.addChild(panel);
         this.logPanel.resize();
     }
@@ -154,7 +153,6 @@ export class Display {
         }
 
         this.logStreamPanels[panelIndex].redrawSubscription.unsubscribe();
-        panel.options.drawCursor = false;
 
         this.logStreamPanels.splice(panelIndex, 1);
         this.logPanel.removeChild(panel);
