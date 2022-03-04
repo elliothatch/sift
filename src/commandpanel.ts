@@ -1,6 +1,7 @@
 import {Attributes, Terminal, Buffer, ScreenBuffer, TextBuffer} from 'terminal-kit';
 
 import { Panel, ScreenPanel, TextPanel } from './panel';
+import { Input } from './input';
 
 export class CommandPanel extends Panel<ScreenBuffer> {
     public keyPanel: ScreenPanel;
@@ -43,18 +44,7 @@ export class CommandPanel extends Panel<ScreenBuffer> {
         return this.buffer;
     }
 
-    public setCommands(commands: Command[]): void {
-        this.commands = commands;
-        const panelHeight = this.commands.length + 1;
-        if(this.options.height !== panelHeight) {
-            this.options.height = panelHeight
-            if(this.parent) {
-                this.parent.resize();
-            }
-        }
-    }
-
-    public printCommands(): void {
+    public render: () => void = () => {
         // clear
         this.keyPanel.buffer.fill({char: ' '});
         (this.descriptionPanel.buffer as any).setText('');
@@ -92,16 +82,28 @@ export class CommandPanel extends Panel<ScreenBuffer> {
                 dy: 1
             }, command.key);
 
-            this.descriptionPanel.buffer.insert(command.description);
+            this.descriptionPanel.buffer.insert(command.action.description);
             this.descriptionPanel.buffer.newLine();
         });
-        
+
+        this.keyPanel.markDirty();
+        this.descriptionPanel.markDirty();
     }
+
+    public setCommands(commands: Command[]): void {
+        this.commands = commands;
+        const panelHeight = this.commands.length + 1;
+        if(this.options.height !== panelHeight) {
+            this.options.height = panelHeight
+            if(this.parent) {
+                this.parent.resize();
+            }
+        }
+    }
+
 }
 
 export interface Command {
     key: string;
-    description: string;
-    /** args from terminal.on */
-    action: (key: any, matches: any, data: any) => void;
+    action: Input.Action;
 }

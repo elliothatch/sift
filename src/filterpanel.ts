@@ -66,28 +66,7 @@ export class FilterPanel extends Panel<ScreenBuffer> {
         return this.buffer;
     }
 
-    public setRules(rules: FilterPanel.Rule[]): void {
-        rules.forEach((rule) => {
-            if(!rule.expr) {
-                try {
-                    rule.expr = this.parser.parse(rule.query)[0];
-                }
-                catch {
-                    // TODO: store error
-                }
-            }
-        });
-        this.rules = rules;
-        const panelHeight = this.rules.length + 1;
-        if(this.options.height !== panelHeight) {
-            this.options.height = panelHeight
-            if(this.parent) {
-                this.parent.resize();
-            }
-        }
-    }
-
-    public printRules(): void {
+    public render:() => void = () => {
         // clear
         this.enabledPanel.buffer.fill({char: ' '});
         (this.namePanel.buffer as any).setText('');
@@ -137,6 +116,31 @@ export class FilterPanel extends Panel<ScreenBuffer> {
             this.queryPanel.buffer.newLine();
 
         });
+
+        this.enabledPanel.markDirty();
+        this.namePanel.markDirty();
+        this.queryPanel.markDirty();
+    }
+
+    public setRules(rules: FilterPanel.Rule[]): void {
+        rules.forEach((rule) => {
+            if(!rule.expr) {
+                try {
+                    rule.expr = this.parser.parse(rule.query)[0];
+                }
+                catch {
+                    // TODO: store error
+                }
+            }
+        });
+        this.rules = rules;
+        const panelHeight = this.rules.length + 1;
+        if(this.options.height !== panelHeight) {
+            this.options.height = panelHeight
+            if(this.parent) {
+                this.parent.resize();
+            }
+        }
     }
 }
 

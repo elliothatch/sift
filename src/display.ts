@@ -1,14 +1,15 @@
-import {terminal, Terminal, Buffer, ScreenBuffer, TextBuffer} from 'terminal-kit';
+import {terminal, Terminal} from 'terminal-kit';
 import { Subscription } from 'rxjs';
 
-import { LogStream } from './logstream';
 
-import { ScreenPanel, TextPanel } from './panel';
-import { LogDisplayPanel } from './logdisplaypanel';
+import { ScreenPanel } from './panel';
 import { CommandPanel } from './commandpanel';
 import { FilterPanel } from './filterpanel';
 import { LogStreamPanel } from './logstreampanel';
 
+/** manages the display
+* most command that alter the UI don't actually redraw. instead we manually call display.draw() in sift actions that trigger those updates. this prevents flickering when an action changes multiple UI elements at once.
+*/
 export class Display {
 
     public terminal: Terminal
@@ -45,21 +46,6 @@ export class Display {
 
         this.rootPanel.addChild(this.logPanel);
 
-        /*
-        Panel.addChild(this.logPanel, new ScreenPanel(this.logPanel.buffer, {
-            name: 'log1',
-            width: 1,
-            height: 1,
-            flex: { width: true, height: true },
-        }));
-        Panel.addChild(this.logPanel, new ScreenPanel(this.logPanel.buffer, {
-            name: 'log2',
-            width: 1,
-            height: 1,
-            flex: { width: true, height: true },
-        }));
-        */
-
         this.commandPanel = new CommandPanel(this.rootPanel.buffer, {
             name: 'command',
             width: 1,
@@ -81,18 +67,6 @@ export class Display {
             this.rootPanel.options.height = height;
             this.rootPanel.resize();
 
-            // TODO: we need to make an abstract "print" function for panels
-            // that will forcably clear and reprint the entire panel
-            // otherwise, we get weird artifacts when resizing
-            // we will have to isolate all the drawing calls we stuck randomly
-            // around index.ts into panel code
-            this.logPanel.children.forEach((logDisplayPanel) => {
-                if(logDisplayPanel instanceof LogDisplayPanel) {
-                    logDisplayPanel.logEntryCache.clear();
-                    logDisplayPanel.print();
-                }
-            });
-
             this.draw();
         });
     }
@@ -103,33 +77,23 @@ export class Display {
     }
 
     public draw() {
-        // this.rootPanel.buffer.fill({char: '1', attr: {color: 'black', bgColor: 'red'}});
-        // this.logPanel.buffer.fill({char: '2', attr: {color: 'black', bgColor: 'green'}});
-
-        this.rootPanel.redrawChildren();
+        // update panel UI
+        this.rootPanel.draw();
+        // draw to terminal
+        this.rootPanel.drawToParent(false);
     }
 
     public showLogStreamPanel(panel: LogStreamPanel) {
         this.logStreamPanels.push({
             panel,
             redrawSubscription: panel.redrawEvents.subscribe(() => {
-                panel.redrawChildren();
-                panel.draw();
+                this.draw();
             })
         });
 
         panel.options.drawCursor = true;
         this.logPanel.addChild(panel);
         this.logPanel.resize();
-
-        this.logPanel.children.forEach((logDisplayPanel) => {
-            if(logDisplayPanel instanceof LogDisplayPanel) {
-                logDisplayPanel.logEntryCache.clear();
-                logDisplayPanel.print();
-            }
-        });
-
-        this.draw();
     }
 
     public hideLogStreamPanel(panel: LogStreamPanel): boolean {
@@ -147,22 +111,14 @@ export class Display {
         this.logPanel.resize();
 
         if(panelIndex === this.logStreamPanelIndex) {
-            panel.selected = false;
-            panel.printTitle();
+            panel.setSelected(false);
 
             this.logStreamPanelIndex = Math.max(0, Math.min(this.logStreamPanels.length - 1, panelIndex));
             const newPanel = this.logStreamPanels[this.logStreamPanelIndex].panel;
-            newPanel.selected = true;
-            newPanel.printTitle();
+            newPanel.setSelected(true);
         }
 
-        this.logPanel.children.forEach((logDisplayPanel) => {
-            if(logDisplayPanel instanceof LogDisplayPanel) {
-                logDisplayPanel.logEntryCache.clear();
-                logDisplayPanel.print();
-            }
-        });
-        this.draw();
+        // all panels were marked dirty by resize
         return true;
     }
 
@@ -172,13 +128,8 @@ export class Display {
             this.logStreamPanelIndex = Math.max(0, Math.min(this.logStreamPanels.length - 1, index));
             const newPanel = this.logStreamPanels[this.logStreamPanelIndex].panel;
 
-            prevPanel.selected = false;
-            prevPanel.printTitle();
-
-            newPanel.selected = true;
-            newPanel.printTitle();
-
-            this.draw();
+            prevPanel.setSelected(false);
+            newPanel.setSelected(true);
         }
     }
 
@@ -189,16 +140,12 @@ export class Display {
 
         this.rootPanel.addChild(this.commandPanel);
         this.rootPanel.resize();
-        this.commandPanel.printCommands();
-        this.commandPanel.redrawChildren();
-        this.commandPanel.draw();
         (this.terminal as any).hideCursor();
     }
 
     public hideCommandPanel() {
         this.rootPanel.removeChild(this.commandPanel);
         this.rootPanel.resize();
-        this.rootPanel.redrawChildren();
         (this.terminal as any).hideCursor(false);
     }
 
@@ -209,36 +156,12 @@ export class Display {
 
         this.rootPanel.addChild(this.filterPanel);
         this.rootPanel.resize();
-        // this.queryBar.draw();
-        this.filterPanel.printRules();
-        this.filterPanel.redrawChildren();
-        this.filterPanel.draw();
         (this.terminal as any).hideCursor();
     }
 
     public hideFilterPanel() {
         this.rootPanel.removeChild(this.filterPanel);
         this.rootPanel.resize();
-        this.rootPanel.redrawChildren();
         (this.terminal as any).hideCursor(false);
     }
 }
-
-/**
-1
-2
-3
-4
-5 
-    {
-        abc
-    }
-6
-7
-8
-9
-10
-100
-  30/58   | RUNNING node | EXITED node2 |
-> myquery&yourquery
- */

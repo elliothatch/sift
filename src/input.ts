@@ -15,7 +15,7 @@ export class Input {
         this.display.terminal.on('key', (name: any, matches: any, data: any) => {
             const handler = this.handlers[this.mode];
             if(handler.bindings[name]) {
-                handler.bindings[name].fn();
+                handler.bindings[name].fn(name, matches, data);
             }
             else if(handler.fallback) {
                 handler.fallback(name, matches, data);
@@ -33,7 +33,7 @@ export namespace Input {
 
     export interface Action {
         description: string;
-        fn: () => void;
+        fn: (key: any, matches: any, data: any) => void;
     }
 
     export interface Handler {

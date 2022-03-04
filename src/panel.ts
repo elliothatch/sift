@@ -19,6 +19,14 @@ export namespace Panel {
     }
 }
 
+/** a panel is a UI element that may contain child panels
+* panels are automatically laid out in column or row order, and can be resized dynamically by setting the flex option
+* each panel has a "draw" function and an optional "render" function
+* "render" does the work of putting text into the panel
+* "draw" calls "render" on itself if it is marked dirty, then recursively calls "draw" on all its dirty children and then copies the contents of the dirty child into its buffer by "drawToParent(false)"
+* thus, calling "draw" on the root panel causes all panels to be re-rendered if necessary, and proegates the updated ui to the terminal.
+* "render" is called before "draw" so that a panel may directly modify the contents of its children in render, and still have those changes propegated to its buffer. sometimes this is more convenient than writing a "render" function for every child in the panel. when directly modifying children, it is necessary to mark the children as dirty in the "render" call
+*/
 export abstract class Panel<T extends Buffer> {
     public options: Panel.Options;
     public buffer: T;
@@ -30,9 +38,15 @@ export abstract class Panel<T extends Buffer> {
     public parent?: Panel<Buffer>;
     public children: Panel<Buffer>[];
 
-    constructor(options: Panel.Options, buffer: T) {
+    /* renders the contents of the panel. automatically called on draw if dirty === true */
+    public render?: () => void;
+    /** indicates that the panel is "dirty" and should be re-rendered */
+    private dirty: boolean = true;
+
+    constructor(options: Panel.Options, buffer: T, render?: () => void) {
         this.options = options;
         this.buffer = buffer;
+        this.render = render;
 
         this.calculatedWidth = 0;
         this.calculatedHeight = 0;
@@ -66,40 +80,42 @@ export abstract class Panel<T extends Buffer> {
     /** returns the screen buffer if it is one, or the dst buffer of a TextBuffer */
     public abstract getScreenBuffer(): ScreenBuffer;
 
-    /** draw the panel itself, but don't propegate the changes up the parent chain
-     * the changes may not be visible until the dst chain has been drawn */
-    public drawSelf(): void {
+    public draw(): void {
+        if(this.dirty) {
+            if(this.render) {
+                this.render();
+            }
+            this.dirty = false;
+        }
+        this.children.forEach((child) => {
+            if(child.dirty) {
+                child.draw();
+                child.drawToParent(false);
+            }
+        });
+    }
+
+    /** mostly used internally, or to draw to the top-level terminal screen */
+    public drawToParent(recursive: boolean): void {
         this.buffer.draw();
         if(this.options.drawCursor) {
             this.buffer.drawCursor();
         }
-    }
 
-    /** draw the buffer and all its parents */
-    public draw() {
-        this.drawSelf();
-        let parent = this.parent;
-        while(parent) {
-            parent.drawSelf();
-            parent = parent.parent;
+        if(recursive && this.parent) {
+            this.parent.drawToParent(recursive);
         }
-        /*
-        let currentBuffer = this.buffer;
-        while(currentBuffer && currentBuffer instanceof ScreenBuffer || currentBuffer instanceof TextBuffer) {
-            currentBuffer.draw();
-            currentBuffer.drawCursor();
-            currentBuffer = currentBuffer.dst as ScreenBuffer;
+    }
+
+    public markDirty(): void {
+        this.dirty = true;
+        if(this.parent) {
+            this.parent.markDirty();
         }
-        */
+
     }
 
-    /** draw all children in a post-DFS order */
-    public redrawChildren(): void {
-        this.children.forEach((child) => child.redrawChildren());
-        this.drawSelf();
-    }
-
-    /** recalculate the size of a panel and its children */
+    /** recalculate the size of a panel and its children. mark all as dirty */
     public resize(): void {
         if(!this.options.flex || !this.options.flex.width) {
             this.calculatedWidth = this.options.width;
@@ -119,6 +135,8 @@ export abstract class Panel<T extends Buffer> {
             width: this.calculatedWidth!,
             height: this.calculatedHeight!,
         });
+
+        this.dirty = true;
 
         if(this.buffer instanceof TextBuffer) {
             // TODO: fix terminal kit type definitions
@@ -190,22 +208,23 @@ export abstract class Panel<T extends Buffer> {
 }
 
 export class ScreenPanel extends Panel<ScreenBuffer> {
-    constructor(dst: Buffer | Terminal, options: Panel.Options) {
+    constructor(dst: Buffer | Terminal, options: Panel.Options, render?: () => void) {
         super(options, new ScreenBuffer({
             dst,
             width: options.width,
             height: options.height,
-        }));
+        }), render);
     }
 
     public getScreenBuffer(): ScreenBuffer {
         return this.buffer;
     }
+
 }
 
 export class TextPanel extends Panel<TextBuffer> {
     public screenBuffer: ScreenBuffer;
-    constructor(dst: Buffer | Terminal, options: Panel.Options) {
+    constructor(dst: Buffer | Terminal, options: Panel.Options, render?: () => void) {
         const screenBuffer = new ScreenBuffer({
             dst,
             width: options.width,
@@ -216,17 +235,29 @@ export class TextPanel extends Panel<TextBuffer> {
             dst: screenBuffer,
             width: options.width,
             height: options.height,
-        }));
+        }), render);
 
         this.screenBuffer = screenBuffer;
     }
 
-    public drawSelf(): void {
-        super.drawSelf();
+    public draw() {
+        super.draw();
 
+        // draw from textbuffer to screenbuffer
+        this.buffer.draw();
+        if(this.options.drawCursor) {
+            this.buffer.drawCursor();
+        }
+    }
+
+    public drawToParent(recursive: boolean) {
         this.screenBuffer.draw();
         if(this.options.drawCursor) {
             this.screenBuffer.drawCursor();
+        }
+
+        if(recursive && this.parent) {
+            this.parent.drawToParent(recursive);
         }
     }
 

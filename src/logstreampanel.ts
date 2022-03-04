@@ -32,7 +32,7 @@ export class LogStreamPanel<T extends LogStream = LogStream> extends Panel<Scree
     protected queryPromptArrowPanel: ScreenPanel;
     public queryPromptInputPanel: TextPanel;
     protected titlePanel: TextPanel;
-    public selected: boolean = false;
+    protected selected: boolean = false;
 
     /** current frame of the spinner animation. if -1, spinner is hidden */
     protected spinnerIndex: number = -1;
@@ -66,7 +66,7 @@ export class LogStreamPanel<T extends LogStream = LogStream> extends Panel<Scree
             flex: {
                 width: true,
             },
-        });
+        }, this.renderQueryResults);
 
         this.queryPromptPanel = new ScreenPanel(this.buffer, {
             name: `${this.options.name? this.options.name: ''}.queryPromptPanel`,
@@ -107,9 +107,7 @@ export class LogStreamPanel<T extends LogStream = LogStream> extends Panel<Scree
             flex: {
                 width: true,
             },
-        });
-
-        this.printTitle();
+        }, this.renderTitle);
 
         this.addChild(this.logDisplayPanel);
         this.addChild(this.queryResultsPanel);
@@ -133,8 +131,9 @@ export class LogStreamPanel<T extends LogStream = LogStream> extends Panel<Scree
                     this.logDisplayPanel.scrollAlignBottom();
                 }
 
-                this.logDisplayPanel.print();
-                this.printQueryResults();
+                this.markDirty();
+                this.logDisplayPanel.markDirty();
+                this.queryResultsPanel.markDirty();
             })
         );
 
@@ -160,7 +159,12 @@ export class LogStreamPanel<T extends LogStream = LogStream> extends Panel<Scree
         return this.buffer;
     }
 
-    public printTitle() {
+    public setSelected(selected: boolean) {
+        this.selected = selected;
+        this.titlePanel.markDirty();
+    }
+
+    public renderTitle: () => void = () => {
         (this.titlePanel.buffer as any).setText('');
         (this.titlePanel.buffer as any).moveTo(0, 0);
         const titleText = this.logStream.source.sType === 'observable'? this.logStream.source.name:
@@ -176,7 +180,7 @@ export class LogStreamPanel<T extends LogStream = LogStream> extends Panel<Scree
         }
     }
 
-    public printQueryResults() {
+    public renderQueryResults: () => void = () => {
         (this.queryResultsPanel.buffer as any).setText('');
         if(this.spinnerIndex >= 0) {
             (this.queryResultsPanel.buffer as any).moveTo(0, 0);
@@ -200,6 +204,7 @@ export class LogStreamPanel<T extends LogStream = LogStream> extends Panel<Scree
     public setQuery(query: string): Subscription | undefined {
         this.query = query;
         (this.queryPromptInputPanel.buffer as any).setText(query);
+        this.queryPromptInputPanel.markDirty();
         let filter: Parse.Expression | undefined = undefined;
         try {
             filter = this.parser.parse(query)[0];

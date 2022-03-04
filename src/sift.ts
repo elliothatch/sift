@@ -5,6 +5,7 @@ import { Display } from './display';
 import { LogStream } from './logstream';
 import { LogStreamPanel } from './logstreampanel';
 import { Input } from './input';
+import { Command } from './commandpanel';
 
 export class Sift {
     public display: Display;
@@ -26,7 +27,7 @@ export class Sift {
         this.siftLogsSubject = new Subject();
         this.siftLogStream = LogStream.fromObservable('sift', this.siftLogsSubject.asObservable());
         this.siftLogStreamPanel = new LogStreamPanel(this.display.logPanel.buffer, {
-            name: `sift-logsterampanel`,
+            name: `sift-logstreampanel`,
             width: 1,
             height: 1,
             flex: {
@@ -69,21 +70,7 @@ export class Sift {
                 logStreamPanel.setQuery((logStreamPanel.queryPromptInputPanel.buffer as any).getText());
             });
 
-        this.display.commandPanel.setCommands([{
-            key: '\\',
-            description: 'insert \\',
-            action: (key, matches, data) => {
-                this.actions[Input.Mode.Command].exitCommandMode.fn();
-                this.currentLogStreamPanel.queryPromptInputPanel.buffer.insert(key);
-                this.onQueryChanged();
-            }
-        }, {
-            key: 'f',
-            description: 'filter',
-            action: (key, matches, data) => {
-                this.actions[Input.Mode.Filter].enterFilterMode.fn();
-            }
-        }]);
+        this.display.commandPanel.setCommands(this.commands);
 
         this.display.filterPanel.setRules([{
             enabled: false,
@@ -114,6 +101,8 @@ export class Sift {
         panel.options.drawCursor = true;
 
         this.logStreams.push({stream, panel});
+
+        this.display.draw();
     }
 
     public terimnateProcess(logStream: LogStream<LogStream.Source.Process>) {
@@ -145,20 +134,14 @@ export class Sift {
         process.exit();
     }
 
-    public drawLogStreamPanel(logStreamPanel: LogStreamPanel) {
-        logStreamPanel.logDisplayPanel.print();
-        logStreamPanel.printQueryResults();
-        logStreamPanel.redrawChildren();
-        logStreamPanel.draw();
-    }
-
     public onQueryChanged() {
-        this.currentLogStreamPanel.queryPromptInputPanel.draw();
+        this.currentLogStreamPanel.queryPromptInputPanel.markDirty();
+        this.display.draw();
         this.queryChangedSubject.next(this.currentLogStreamPanel);
     }
 
-    public actions: {[mode in Input.Mode]: {[name: string]: Input.Action}} = {
-        [Input.Mode.Query]: {
+    public actions = {
+        [Input.Mode.Query]: asActions({
             'terimnateProcessOrClose': {
                 description: 'Terminate process. If all processes are terminated, close sift',
                 fn: () => {
@@ -187,6 +170,7 @@ export class Sift {
                 fn: () => {
                     this.display.selectLogStreamPanel((this.display.logStreamPanelIndex - 1 + this.display.logStreamPanels.length) % this.display.logStreamPanels.length);
                     this.currentLogStreamPanel = this.display.logStreamPanels[this.display.logStreamPanelIndex].panel;
+                    this.display.draw();
                 }
             },
             'selectPanelRight': {
@@ -194,6 +178,8 @@ export class Sift {
                 fn: () => {
                     this.display.selectLogStreamPanel((this.display.logStreamPanelIndex + 1) % this.display.logStreamPanels.length);
                     this.currentLogStreamPanel = this.display.logStreamPanels[this.display.logStreamPanelIndex].panel;
+
+                    this.display.draw();
                 }
             },
             'toggleSelection': {
@@ -201,7 +187,7 @@ export class Sift {
                 fn: () => {
                         this.currentLogStreamPanel.logDisplayPanel.toggleExpandSelection();
                         this.currentLogStreamPanel.logDisplayPanel.scrollToMaximizeLog(this.currentLogStreamPanel.logDisplayPanel.selectionIndex);
-                        this.drawLogStreamPanel(this.currentLogStreamPanel);
+                        this.display.draw();
                 }
             },
             'scrollUp': {
@@ -210,7 +196,7 @@ export class Sift {
                         this.currentLogStreamPanel.logDisplayPanel.moveSelectionUp(1);
                         this.currentLogStreamPanel.logDisplayPanel.scrollToSelection();
                         this.currentLogStreamPanel.autoscroll = false;
-                        this.drawLogStreamPanel(this.currentLogStreamPanel);
+                        this.display.draw();
                 }
             },
             'scrollDown': {
@@ -219,7 +205,7 @@ export class Sift {
                         this.currentLogStreamPanel.logDisplayPanel.moveSelectionDown(1);
                         this.currentLogStreamPanel.logDisplayPanel.scrollToSelection();
                         this.currentLogStreamPanel.autoscroll = false;
-                        this.drawLogStreamPanel(this.currentLogStreamPanel);
+                        this.display.draw();
                 }
             },
             'pageUp': {
@@ -228,7 +214,7 @@ export class Sift {
                         this.currentLogStreamPanel.logDisplayPanel.moveSelectionUp(20);
                         this.currentLogStreamPanel.logDisplayPanel.scrollToSelection();
                         this.currentLogStreamPanel.autoscroll = false;
-                        this.drawLogStreamPanel(this.currentLogStreamPanel);
+                        this.display.draw();
                 }
             },
             'pageDown': {
@@ -237,16 +223,16 @@ export class Sift {
                         this.currentLogStreamPanel.logDisplayPanel.moveSelectionDown(20);
                         this.currentLogStreamPanel.logDisplayPanel.scrollToSelection();
                         this.currentLogStreamPanel.autoscroll = false;
-                        this.drawLogStreamPanel(this.currentLogStreamPanel);
+                        this.display.draw();
                 }
             },
             'scrollStart': {
                 description: 'Scroll to first log',
                 fn: () => {
-                        this.currentLogStreamPanel.logDisplayPanel.selectLog(this.currentLogStreamPanel.logDisplayPanel.logs.length - 1);
+                        this.currentLogStreamPanel.logDisplayPanel.selectLog(0);
                         this.currentLogStreamPanel.logDisplayPanel.scrollToSelection();
-                        this.currentLogStreamPanel.autoscroll = true;
-                        this.drawLogStreamPanel(this.currentLogStreamPanel);
+                        this.currentLogStreamPanel.autoscroll = false;
+                        this.display.draw();
                 }
             }, 
             'scrollEnd': {
@@ -255,14 +241,15 @@ export class Sift {
                         this.currentLogStreamPanel.logDisplayPanel.selectLog(this.currentLogStreamPanel.logDisplayPanel.logs.length - 1);
                         this.currentLogStreamPanel.logDisplayPanel.scrollToSelection();
                         this.currentLogStreamPanel.autoscroll = true;
-                        this.drawLogStreamPanel(this.currentLogStreamPanel);
+                        this.display.draw();
                 }
             }, 
             'queryCursorLeft': {
                 description: 'Move query cursor left',
                 fn: () => {
                     this.currentLogStreamPanel.queryPromptInputPanel.buffer.moveBackward(false);
-                    this.currentLogStreamPanel.queryPromptInputPanel.draw();
+                    this.currentLogStreamPanel.markDirty();
+                    this.display.draw();
                 }
             },
             'queryCursorRight': {
@@ -270,7 +257,9 @@ export class Sift {
                 fn: () => {
                     if((this.currentLogStreamPanel.queryPromptInputPanel.buffer as any).cx < this.currentLogStreamPanel.queryPromptInputPanel.buffer.getText().length) {
                         this.currentLogStreamPanel.queryPromptInputPanel.buffer.moveForward(false);
-                        this.currentLogStreamPanel.queryPromptInputPanel.draw();
+
+                        this.currentLogStreamPanel.markDirty();
+                        this.display.draw();
                     }
                 }
             },
@@ -278,7 +267,6 @@ export class Sift {
                 description: 'Back delete the query',
                 fn: () => {
                     this.currentLogStreamPanel.queryPromptInputPanel.buffer.backDelete(1);
-                    // this.currentLogStreamPanel.queryPromptInputPanel.draw();
                     this.onQueryChanged();
                 }
             },
@@ -286,7 +274,6 @@ export class Sift {
                 description: 'Forward delete the query',
                 fn: () => {
                     this.currentLogStreamPanel.queryPromptInputPanel.buffer.delete(1);
-                    // this.currentLogStreamPanel.queryPromptInputPanel.draw();
                     this.onQueryChanged();
                 }
             },
@@ -298,13 +285,14 @@ export class Sift {
                     this.onQueryChanged();
                 }
             },
-        },
-        [Input.Mode.Command]: {
+        }),
+        [Input.Mode.Command]: asActions({
             'enterCommandMode': {
                 description: 'Display the command pane',
                 fn: () => {
                     this.input.mode = Input.Mode.Command;
                     this.display.showCommandPanel();
+                    this.display.draw();
                 }
             },
             'exitCommandMode': {
@@ -312,16 +300,26 @@ export class Sift {
                 fn: () => {
                     this.input.mode = Input.Mode.Query;
                     this.display.hideCommandPanel();
+                    this.display.draw();
                 }
+            // commands
             },
-        },
-        [Input.Mode.Filter]: {
+            'insertBackslash': {
+                description: 'insert \\',
+                fn: (key, matches, data) => {
+                    this.actions[Input.Mode.Command].exitCommandMode.fn(key, matches, data);
+                    this.currentLogStreamPanel.queryPromptInputPanel.buffer.insert(key);
+                    this.onQueryChanged();
+                }
+        }}),
+        [Input.Mode.Filter]: asActions({
             'enterFilterMode': {
                 description: 'Enter filter mode',
                 fn: () => {
                     this.input.mode = Input.Mode.Filter;
                     this.display.hideCommandPanel();
                     this.display.showFilterPanel();
+                    this.display.draw();
                 }
             },
             'exitFilterMode': {
@@ -329,9 +327,10 @@ export class Sift {
                 fn: () => {
                     this.input.mode = Input.Mode.Query;
                     this.display.hideFilterPanel();
+                    this.display.draw();
                 }
             }
-        }
+        })
     };
 
     public bindings: {[mode in Input.Mode]: {[key: string]: Input.Action}} = {
@@ -365,6 +364,15 @@ export class Sift {
         },
     };
 
+    /** commands listed in the command panel. they are displayed in array order */
+    public commands: Command[] = [{
+            key: '\\',
+            action: this.actions[Input.Mode.Command].insertBackslash,
+        }, {
+            key: 'f',
+            action: this.actions[Input.Mode.Filter].enterFilterMode,
+        }];
+
     protected handleQueryInput = (name: any, matches: any, data: any) => {
         if(data.isCharacter) {
             this.currentLogStreamPanel.queryPromptInputPanel.buffer.insert(name);
@@ -375,12 +383,17 @@ export class Sift {
     protected handleCommandInput = (name: any, matches: any, data: any) => {
         this.display.commandPanel.commands.forEach((command) => {
             if(name === command.key) {
-                command.action(name, matches, data);
+                command.action.fn(name, matches, data);
             }
         });
     };
 }
 
+// helper function which infers keys and restricts values to Input.Action
+// this allows strongly typed action object
+function asActions<T>(actions: { [K in keyof T]: Input.Action }) {
+    return actions;
+}
 
 /*
 *

@@ -93,6 +93,59 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
         this.addChild(this.logPanel);
     }
 
+    /** overload resize to reset cache */
+    public resize(): void {
+        super.resize();
+        this.logEntryCache.clear();
+    }
+
+    public render: () => void = () => {
+        this.logPanel.buffer.fill({char: ' '});
+        this.logPanel.buffer.moveTo(0, 0);
+        (this.idxPanel.buffer as any).setText('');
+        (this.idxPanel.buffer as any).moveTo(0, 0);
+
+        let entryIdx = this.scrollLogIndex;
+        let entryScrollPos = this.scrollPosition;
+
+        for(let i = 0; i < this.logPanel.calculatedHeight; i++) {
+            if(entryIdx >= this.logs.length) {
+                break;
+            }
+
+            const record = this.logs[entryIdx];
+            const logEntry = this.getLogEntry(record);
+
+            if(entryScrollPos === 0) {
+                this.printIdx(record.idx, i);
+            }
+
+            this.printLogEntry(logEntry, i, entryScrollPos);
+            if(this.selectionIndex === entryIdx && this.selectionScrollPosition === entryScrollPos) {
+                // invert the colors of the selected row
+                for(let col = 0; col < this.logPanel.calculatedWidth; col++) {
+                    const {char, attr} = (this.logPanel.buffer as any).get({x: col, y: i});
+                    attr.inverse = true;
+                    (this.logPanel.buffer as any).put({x: col, y: i, attr}, char);
+                }
+            }
+
+            entryScrollPos++;
+
+            const logHeight = logEntry.getContentSize().height;
+            if(entryScrollPos >= logHeight) {
+                // reached end of log, move onto next
+                entryIdx++;
+                entryScrollPos = 0;
+            }
+            // this.redrawChildren();
+            // this.draw();
+        }
+
+        this.idxPanel.markDirty();
+        this.logPanel.markDirty();
+    }
+
     /** @param formatStr - a format string used to color, style, and substitute values in the log summary
     * substitutions are indictated with curly braces {property|attributes|prefix|suffix}
     * attributes is a comma separated list of name:value pairs of terminal-kit attributes
@@ -176,52 +229,8 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
     }
 
     /** prints a single log entry at the end of the display */
-    public appendLog(record: LogRecord, y: number) {
-    }
-
-    public print() {
-        this.logPanel.buffer.fill({char: ' '});
-        this.logPanel.buffer.moveTo(0, 0);
-        (this.idxPanel.buffer as any).setText('');
-        (this.idxPanel.buffer as any).moveTo(0, 0);
-
-        let entryIdx = this.scrollLogIndex;
-        let entryScrollPos = this.scrollPosition;
-
-        for(let i = 0; i < this.logPanel.calculatedHeight; i++) {
-            if(entryIdx >= this.logs.length) {
-                break;
-            }
-
-            const record = this.logs[entryIdx];
-            const logEntry = this.getLogEntry(record);
-
-            if(entryScrollPos === 0) {
-                this.printIdx(record.idx, i);
-            }
-
-            this.printLogEntry(logEntry, i, entryScrollPos);
-            if(this.selectionIndex === entryIdx && this.selectionScrollPosition === entryScrollPos) {
-                // invert the colors of the selected row
-                for(let col = 0; col < this.logPanel.calculatedWidth; col++) {
-                    const {char, attr} = (this.logPanel.buffer as any).get({x: col, y: i});
-                    attr.inverse = true;
-                    (this.logPanel.buffer as any).put({x: col, y: i, attr}, char);
-                }
-            }
-
-            entryScrollPos++;
-
-            const logHeight = logEntry.getContentSize().height;
-            if(entryScrollPos >= logHeight) {
-                // reached end of log, move onto next
-                entryIdx++;
-                entryScrollPos = 0;
-            }
-            // this.redrawChildren();
-            // this.draw();
-        }
-    }
+    // public appendLog(record: LogRecord, y: number) {
+    // }
 
     /** scrolls until there is no empty space at the top or bottom of the list, ensuring as many logs are displayed as possible */
     public scrollAlignBottom() {
@@ -259,6 +268,8 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
                 entryIdx++;
             }
         }
+
+        this.markDirty();
     }
 
     /** sets scrollLogIdx and scrollPosition so the target log is at the bottom of the screen. */
@@ -283,11 +294,13 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
         this.scrollPosition = totalHeight - this.logPanel.calculatedHeight;
 
         this.scrollAlignBottom();
+        this.markDirty();
     }
 
     public scrollToLog(idx: number) {
         this.scrollLogIndex = Math.max(0, Math.min(idx, this.logs.length));
         this.scrollPosition = 0;
+        this.markDirty();
     }
 
     public scrollUp(count: number) {
@@ -303,6 +316,7 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
                 this.scrollPosition = logHeight - 1;
             }
         }
+        this.markDirty();
     }
 
     public scrollDown(count: number) {
@@ -323,6 +337,7 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
                 this.scrollPosition = 0;
             }
         }
+        this.markDirty();
     }
 
     /** find the log and scroll index of the bottom entry on the screen. */
@@ -378,11 +393,13 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
                 this.scrollDown(this.selectionScrollPosition - bottomPosition.scrollPosition);
             }
         }
+        this.markDirty();
     }
 
     public selectLog(idx: number) {
         this.selectionIndex = idx;
         this.selectionScrollPosition = 0;
+        this.markDirty();
     }
 
     public moveSelectionUp(count: number) {
@@ -407,6 +424,7 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
                 // this.logEntryCache.delete(this.selectionLogIdx);
             }
         }
+        this.markDirty();
     }
 
     public moveSelectionDown(count: number) {
@@ -434,6 +452,7 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
             }
 
         }
+        this.markDirty();
     }
 
 
@@ -454,11 +473,13 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
             // this.scrollPosition = 0;
 
             this.logEntryCache.delete(idx);
+            this.markDirty();
             return false;
         }
         else {
             this.expandedLogs.add(idx);
             this.logEntryCache.delete(idx);
+            this.markDirty();
             return true;
         }
 
@@ -484,6 +505,7 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
             }
             this.scrollAlignBottom();
         }
+        this.markDirty();
     }
 
     /** prints the log at the bottom of the screen, and previous logs above. */
