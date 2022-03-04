@@ -27,7 +27,7 @@ export class LogStreamPanel<T extends LogStream = LogStream> extends Panel<Scree
     protected filterSubscription?: Subscription;
 
     public logDisplayPanel: LogDisplayPanel
-    protected queryResultsPanel: TextPanel;
+    public queryResultsPanel: TextPanel;
     protected queryPromptPanel: ScreenPanel;
     protected queryPromptArrowPanel: ScreenPanel;
     public queryPromptInputPanel: TextPanel;
@@ -123,7 +123,7 @@ export class LogStreamPanel<T extends LogStream = LogStream> extends Panel<Scree
             tap(() => {
                 if(this.autoscroll) {
                     this.logDisplayPanel.scrollToLogFromBottom(this.logDisplayPanel.logs.length - 1);
-                    this.logDisplayPanel.selectionIndex = this.logDisplayPanel.logs.length - 1;
+                    this.logDisplayPanel.selectionIndex = Math.max(0, this.logDisplayPanel.logs.length - 1);
                     this.logDisplayPanel.selectionScrollPosition = 0;
                 }
                 else {
@@ -192,7 +192,6 @@ export class LogStreamPanel<T extends LogStream = LogStream> extends Panel<Scree
             (this.queryResultsPanel.buffer as any).moveTo(0, 0);
             this.queryResultsPanel.buffer.insert(this.spinnerFrames[this.spinnerIndex]);
             this.spinnerIndex = (this.spinnerIndex + 1) % this.spinnerFrames.length;
-            this.queryResultsPanel.markDirty();
         }
 
         (this.queryResultsPanel.buffer as any).moveTo(2, 0);

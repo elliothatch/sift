@@ -499,7 +499,7 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
 * @returns true if the log was expanded, and false if it was collapsed, or selection is invalid 
 */
     public toggleExpandSelection(): boolean {
-        if(this.selectionIndex >= this.logs.length) {
+        if(this.selectionIndex >= this.logs.length || this.logs.length === 0) {
             return false;
         }
 

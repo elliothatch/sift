@@ -71,7 +71,7 @@ export class LogStream<T extends LogStream.Source<K> = LogStream.Source<any>, K 
                 message: `Child source "${targetProcess.spawnfile}" (${targetProcess.pid}) exited with ${code != null? 'code "' + code + '"': 'signal "' + signal + '"'}`
             }));
             logStream.logdb.ingest(JSON.stringify({
-                level: 'info', message: `Press CTRL_C to close sift`
+                level: 'warn', message: `Press CTRL_C to close sift`
             }));
         });
 

@@ -213,63 +213,70 @@ export class Sift {
             'toggleSelection': {
                 description: 'Expand or condense the selected log',
                 fn: () => {
-                        this.currentLogStreamPanel.logDisplayPanel.toggleExpandSelection();
-                        this.currentLogStreamPanel.logDisplayPanel.scrollToMaximizeLog(this.currentLogStreamPanel.logDisplayPanel.selectionIndex);
-                        this.display.draw();
+                    this.currentLogStreamPanel.logDisplayPanel.toggleExpandSelection();
+                    this.currentLogStreamPanel.logDisplayPanel.scrollToMaximizeLog(this.currentLogStreamPanel.logDisplayPanel.selectionIndex);
+                    this.currentLogStreamPanel.queryResultsPanel.markDirty();
+                    this.display.draw();
                 }
             },
             'scrollUp': {
                 description: 'Move selection up one log',
                 fn: () => {
-                        this.currentLogStreamPanel.logDisplayPanel.moveSelectionUp(1);
-                        this.currentLogStreamPanel.logDisplayPanel.scrollToSelection();
-                        this.currentLogStreamPanel.autoscroll = false;
-                        this.display.draw();
+                    this.currentLogStreamPanel.logDisplayPanel.moveSelectionUp(1);
+                    this.currentLogStreamPanel.logDisplayPanel.scrollToSelection();
+                    this.currentLogStreamPanel.autoscroll = false;
+                    this.currentLogStreamPanel.queryResultsPanel.markDirty();
+                    this.display.draw();
                 }
             },
             'scrollDown': {
                 description: 'Move selection down one log',
                 fn: () => {
-                        this.currentLogStreamPanel.logDisplayPanel.moveSelectionDown(1);
-                        this.currentLogStreamPanel.logDisplayPanel.scrollToSelection();
-                        this.currentLogStreamPanel.autoscroll = false;
-                        this.display.draw();
+                    this.currentLogStreamPanel.logDisplayPanel.moveSelectionDown(1);
+                    this.currentLogStreamPanel.logDisplayPanel.scrollToSelection();
+                    this.currentLogStreamPanel.autoscroll = false;
+                    this.currentLogStreamPanel.queryResultsPanel.markDirty();
+                    this.display.draw();
                 }
             },
             'pageUp': {
                 description: 'Move selection up one page (20 logs)',
                 fn: () => {
-                        this.currentLogStreamPanel.logDisplayPanel.moveSelectionUp(20);
-                        this.currentLogStreamPanel.logDisplayPanel.scrollToSelection();
-                        this.currentLogStreamPanel.autoscroll = false;
-                        this.display.draw();
+                    this.currentLogStreamPanel.logDisplayPanel.moveSelectionUp(20);
+                    this.currentLogStreamPanel.logDisplayPanel.scrollToSelection();
+                    this.currentLogStreamPanel.autoscroll = false;
+                    this.currentLogStreamPanel.queryResultsPanel.markDirty();
+                    this.display.draw();
                 }
             },
             'pageDown': {
                 description: 'Move selection down one page (20 logs)',
                 fn: () => {
-                        this.currentLogStreamPanel.logDisplayPanel.moveSelectionDown(20);
-                        this.currentLogStreamPanel.logDisplayPanel.scrollToSelection();
-                        this.currentLogStreamPanel.autoscroll = false;
-                        this.display.draw();
+                    this.currentLogStreamPanel.logDisplayPanel.moveSelectionDown(20);
+                    this.currentLogStreamPanel.logDisplayPanel.scrollToSelection();
+                    this.currentLogStreamPanel.autoscroll = false;
+                    this.currentLogStreamPanel.queryResultsPanel.markDirty();
+                    this.display.draw();
                 }
             },
             'scrollStart': {
                 description: 'Scroll to first log',
                 fn: () => {
-                        this.currentLogStreamPanel.logDisplayPanel.selectLog(0);
-                        this.currentLogStreamPanel.logDisplayPanel.scrollToSelection();
-                        this.currentLogStreamPanel.autoscroll = false;
-                        this.display.draw();
+                    this.currentLogStreamPanel.logDisplayPanel.selectLog(0);
+                    this.currentLogStreamPanel.logDisplayPanel.scrollToSelection();
+                    this.currentLogStreamPanel.autoscroll = false;
+                    this.currentLogStreamPanel.queryResultsPanel.markDirty();
+                    this.display.draw();
                 }
             }, 
             'scrollEnd': {
                 description: 'Scroll to last log and enables autoscroll',
                 fn: () => {
-                        this.currentLogStreamPanel.logDisplayPanel.selectLog(this.currentLogStreamPanel.logDisplayPanel.logs.length - 1);
-                        this.currentLogStreamPanel.logDisplayPanel.scrollToSelection();
-                        this.currentLogStreamPanel.autoscroll = true;
-                        this.display.draw();
+                    this.currentLogStreamPanel.logDisplayPanel.selectLog(this.currentLogStreamPanel.logDisplayPanel.logs.length - 1);
+                    this.currentLogStreamPanel.logDisplayPanel.scrollToSelection();
+                    this.currentLogStreamPanel.autoscroll = true;
+                    this.currentLogStreamPanel.queryResultsPanel.markDirty();
+                    this.display.draw();
                 }
             }, 
             'queryCursorLeft': {
@@ -393,6 +400,9 @@ export class Sift {
                     if(this.textPromptOnSubmit) {
                         this.textPromptOnSubmit(this.display.textInputPanel.buffer.getText());
                     }
+                    else {
+                        this.display.draw();
+                    }
                 }
             },
             'cancelText': {
@@ -403,6 +413,9 @@ export class Sift {
                     this.input.mode = Input.Mode.Query;
                     if(this.textPromptOnCancel) {
                         this.textPromptOnCancel();
+                    }
+                    else {
+                        this.display.draw();
                     }
                 }
             },
