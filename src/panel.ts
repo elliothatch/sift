@@ -1,6 +1,4 @@
-import {Attributes, Terminal, Buffer, ScreenBuffer, TextBuffer} from 'terminal-kit';
-
-import {LogRecord, LogIdx, PropertyId, ResultSet} from './logdb';
+import {Terminal, Buffer, ScreenBuffer, TextBuffer} from 'terminal-kit';
 
 export namespace Panel {
     export interface Options {
@@ -42,6 +40,7 @@ export abstract class Panel<T extends Buffer> {
     public render?: () => void;
     /** indicates that the panel is "dirty" and should be re-rendered */
     private dirty: boolean = true;
+    private childrenDirty: boolean = true;
 
     constructor(options: Panel.Options, buffer: T, render?: () => void) {
         this.options = options;
@@ -87,12 +86,15 @@ export abstract class Panel<T extends Buffer> {
             }
             this.dirty = false;
         }
-        this.children.forEach((child) => {
-            if(child.dirty) {
-                child.draw();
-                child.drawToParent(false);
-            }
-        });
+        if(this.childrenDirty) {
+            this.children.forEach((child) => {
+                if(child.dirty || child.childrenDirty) {
+                    child.draw();
+                    child.drawToParent(false);
+                }
+            });
+            this.childrenDirty = false;
+        }
     }
 
     /** mostly used internally, or to draw to the top-level terminal screen */
@@ -110,9 +112,16 @@ export abstract class Panel<T extends Buffer> {
     public markDirty(): void {
         this.dirty = true;
         if(this.parent) {
-            this.parent.markDirty();
+            this.parent.markDirtyChildren();
         }
+    }
 
+    /** indicates that children are dirty and should be checked on the next draw call, even if this panel itself does not need to be rerendered. prevents redundant render calls. might not really be necessary */
+    public markDirtyChildren(): void {
+        this.childrenDirty = true;
+        if(this.parent) {
+            this.parent.markDirtyChildren();
+        }
     }
 
     /** recalculate the size of a panel and its children. mark all as dirty */
@@ -145,6 +154,7 @@ export abstract class Panel<T extends Buffer> {
         }
 
         if(this.children.length > 0) {
+            this.childrenDirty = true;
             const flexChildren: Panel<Buffer>[] = [];
             const fixedChildren: Panel<Buffer>[] = [];
             this.children.forEach((child) => {

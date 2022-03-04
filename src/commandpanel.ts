@@ -100,7 +100,6 @@ export class CommandPanel extends Panel<ScreenBuffer> {
             }
         }
     }
-
 }
 
 export interface Command {

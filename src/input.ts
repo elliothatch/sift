@@ -29,6 +29,7 @@ export namespace Input {
         Query,
         Command,
         Filter,
+        Text,
     }
 
     export interface Action {

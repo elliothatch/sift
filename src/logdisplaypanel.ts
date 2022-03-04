@@ -273,8 +273,12 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
     }
 
     /** sets scrollLogIdx and scrollPosition so the target log is at the bottom of the screen. */
-    public scrollToLogFromBottom(idx: number) {
-        let entryIdx = idx;
+    public scrollToLogFromBottom(index: number) {
+        if(this.logs.length === 0) {
+            return;
+        }
+
+        let entryIdx = index;
         let totalHeight = 0;
 
         while(totalHeight < this.logPanel.calculatedHeight) {
@@ -297,8 +301,8 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
         this.markDirty();
     }
 
-    public scrollToLog(idx: number) {
-        this.scrollLogIndex = Math.max(0, Math.min(idx, this.logs.length));
+    public scrollToLog(index: number) {
+        this.scrollLogIndex = Math.max(0, Math.min(index, this.logs.length));
         this.scrollPosition = 0;
         this.markDirty();
     }
@@ -396,10 +400,45 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
         this.markDirty();
     }
 
-    public selectLog(idx: number) {
-        this.selectionIndex = idx;
+    public selectLog(index: number) {
+        this.selectionIndex = Math.min(Math.max(0, index), this.logs.length);
         this.selectionScrollPosition = 0;
         this.markDirty();
+    }
+
+    /** tries to find the target log index. if not found, selects the closest log less than the specified idx */
+    public selectLogIdx(idx: LogIdx) {
+        // binary search for target log
+        let low = 0;
+        let high = this.logs.length - 1;
+        while(low <= high) {
+            const mid = Math.floor((low + high) / 2);
+
+            const log = this.logs[mid];
+            if(log.idx === idx) {
+                this.selectionIndex = mid;
+                this.selectionScrollPosition = 0;
+                return;
+            } else if(log.idx < idx) {
+                low = mid + 1;
+            }
+            else {
+                high = mid - 1;
+            }
+        }
+
+        // idx wasn't found, select the closest log without going over
+        if(low >= this.logs.length) {
+            this.selectionIndex = Math.max(0, this.logs.length - 1);
+            this.selectionScrollPosition = 0;
+        } else if(this.logs[low].idx < idx) {
+            this.selectionIndex = low;
+            this.selectionScrollPosition = 0;
+        }
+        else {
+            this.selectionIndex = Math.max(0, low - 1);
+            this.selectionScrollPosition = 0;
+        }
     }
 
     public moveSelectionUp(count: number) {

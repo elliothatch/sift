@@ -20,6 +20,9 @@ export class Sift {
     public currentLogStreamPanel: LogStreamPanel;
     protected queryChangedSubject: Subject<LogStreamPanel>;
 
+    protected textPromptOnSubmit?: (text: string) => void;
+    protected textPromptOnCancel?: () => void;
+
     constructor() {
         this.display = new Display();
         this.display.init();
@@ -56,6 +59,10 @@ export class Sift {
             },
             [Input.Mode.Filter]: {
                 bindings: this.bindings[Input.Mode.Filter],
+            },
+            [Input.Mode.Text]: {
+                bindings: this.bindings[Input.Mode.Text],
+                fallback: this.handleTextInput,
             }
         });
 
@@ -139,6 +146,27 @@ export class Sift {
         this.display.draw();
         this.queryChangedSubject.next(this.currentLogStreamPanel);
     }
+
+    public promptTextInput(label: string, onSubmit: (text: string) => void, onCancel?: () => void) {
+        const labelText = label + ': ';
+        this.display.textLabelPanel.options.width = labelText.length;
+        this.display.showTextPanel();
+
+        (this.display.textInputPanel.buffer as any).moveTo(0,0);
+        (this.display.textInputPanel.buffer as any).setText('');
+
+        (this.display.textLabelPanel.buffer as any).moveTo(0,0);
+        (this.display.textLabelPanel.buffer as any).setText(labelText);
+
+        this.display.textLabelPanel.markDirty();
+
+        this.textPromptOnSubmit = onSubmit;
+        this.textPromptOnCancel = onCancel;
+
+        this.input.mode = Input.Mode.Text;
+        this.display.draw();
+    }
+
 
     public actions = {
         [Input.Mode.Query]: asActions({
@@ -248,7 +276,7 @@ export class Sift {
                 description: 'Move query cursor left',
                 fn: () => {
                     this.currentLogStreamPanel.queryPromptInputPanel.buffer.moveBackward(false);
-                    this.currentLogStreamPanel.markDirty();
+                    this.currentLogStreamPanel.queryPromptInputPanel.markDirty();
                     this.display.draw();
                 }
             },
@@ -258,7 +286,7 @@ export class Sift {
                     if((this.currentLogStreamPanel.queryPromptInputPanel.buffer as any).cx < this.currentLogStreamPanel.queryPromptInputPanel.buffer.getText().length) {
                         this.currentLogStreamPanel.queryPromptInputPanel.buffer.moveForward(false);
 
-                        this.currentLogStreamPanel.markDirty();
+                        this.currentLogStreamPanel.queryPromptInputPanel.markDirty();
                         this.display.draw();
                     }
                 }
@@ -282,7 +310,10 @@ export class Sift {
                 fn: () => {
                     (this.currentLogStreamPanel.queryPromptInputPanel.buffer as any).setText('');
                     (this.currentLogStreamPanel.queryPromptInputPanel.buffer as any).moveTo(0, 0);
-                    this.onQueryChanged();
+                    // don't wait for debounce
+                    this.currentLogStreamPanel.queryPromptInputPanel.markDirty();
+                    this.display.draw();
+                    this.currentLogStreamPanel.setQuery((this.currentLogStreamPanel.queryPromptInputPanel.buffer as any).getText());
                 }
             },
         }),
@@ -311,7 +342,28 @@ export class Sift {
                     this.currentLogStreamPanel.queryPromptInputPanel.buffer.insert(key);
                     this.onQueryChanged();
                 }
-        }}),
+            },
+            'gotoLog': {
+                description: 'goto log',
+                fn: (key, matches, data) => {
+                    this.display.hideCommandPanel();
+                    this.promptTextInput('goto log index',
+                        (text) => {
+                            const logIndex = parseInt(text);
+                            if(isFinite(logIndex) && logIndex >= 0) {
+                                this.currentLogStreamPanel.autoscroll = false;
+                                this.currentLogStreamPanel.logDisplayPanel.selectLogIdx(logIndex);
+                                this.currentLogStreamPanel.logDisplayPanel.scrollToMaximizeLog(this.currentLogStreamPanel.logDisplayPanel.selectionIndex);
+
+                                this.input.mode = Input.Mode.Query;
+                                (this.display.terminal as any).hideCursor(false);
+                                this.display.draw();
+                            }
+                        }
+                    );
+                }
+            }
+        }),
         [Input.Mode.Filter]: asActions({
             'enterFilterMode': {
                 description: 'Enter filter mode',
@@ -330,7 +382,66 @@ export class Sift {
                     this.display.draw();
                 }
             }
-        })
+        }),
+        [Input.Mode.Text]: asActions({
+            'submitText': {
+                description: 'Submit the text input and close the prompt',
+                fn: () => {
+                    this.display.hideTextPanel();
+                    // default to query mode. onSubmit may override this
+                    this.input.mode = Input.Mode.Query;
+                    if(this.textPromptOnSubmit) {
+                        this.textPromptOnSubmit(this.display.textInputPanel.buffer.getText());
+                    }
+                }
+            },
+            'cancelText': {
+                description: 'Cancel text input and close the prompt',
+                fn: () => {
+                    this.display.hideTextPanel();
+                    // default to query mode. onCancel may override this
+                    this.input.mode = Input.Mode.Query;
+                    if(this.textPromptOnCancel) {
+                        this.textPromptOnCancel();
+                    }
+                }
+            },
+            'textCursorLeft': {
+                description: 'Move text cursor left',
+                fn: () => {
+                    this.display.textInputPanel.buffer.moveBackward(false);
+                    this.display.textInputPanel.markDirty();
+                    this.display.draw();
+                }
+            },
+            'textCursorRight': {
+                description: 'Move text cursor right',
+                fn: () => {
+                    if((this.display.textInputPanel.buffer as any).cx < this.display.textInputPanel.buffer.getText().length) {
+                        this.display.textInputPanel.buffer.moveForward(false);
+
+                        this.display.textInputPanel.markDirty();
+                        this.display.draw();
+                    }
+                }
+            },
+            'backspace': {
+                description: 'Back delete the text',
+                fn: () => {
+                    this.display.textInputPanel.buffer.backDelete(1);
+                    this.display.textInputPanel.markDirty();
+                    this.display.draw();
+                }
+            },
+            'delete': {
+                description: 'Forward delete the query',
+                fn: () => {
+                    this.display.textInputPanel.buffer.delete(1);
+                    this.display.textInputPanel.markDirty();
+                    this.display.draw();
+                }
+            },
+        }),
     };
 
     public bindings: {[mode in Input.Mode]: {[key: string]: Input.Action}} = {
@@ -339,6 +450,7 @@ export class Sift {
             'CTRL_LEFT': this.actions[Input.Mode.Query].selectPanelRight,
             'CTRL_RIGHT': this.actions[Input.Mode.Query].selectPanelLeft,
             'ENTER': this.actions[Input.Mode.Query].toggleSelection,
+            'KP_ENTER': this.actions[Input.Mode.Query].toggleSelection,
             'UP': this.actions[Input.Mode.Query].scrollUp,
             'DOWN': this.actions[Input.Mode.Query].scrollDown,
             'PAGE_UP': this.actions[Input.Mode.Query].pageUp,
@@ -362,6 +474,16 @@ export class Sift {
             'ESCAPE': this.actions[Input.Mode.Filter].exitFilterMode,
             'BACKSPACE': this.actions[Input.Mode.Filter].exitFilterMode,
         },
+        [Input.Mode.Text]: {
+            'CTRL_C': this.actions[Input.Mode.Text].cancelText,
+            'ESCAPE': this.actions[Input.Mode.Text].cancelText,
+            'ENTER': this.actions[Input.Mode.Text].submitText,
+            'KP_ENTER': this.actions[Input.Mode.Text].submitText,
+            'LEFT': this.actions[Input.Mode.Text].textCursorLeft,
+            'RIGHT': this.actions[Input.Mode.Text].textCursorRight,
+            'BACKSPACE': this.actions[Input.Mode.Text].backspace,
+            'DELETE': this.actions[Input.Mode.Text].delete,
+        }
     };
 
     /** commands listed in the command panel. they are displayed in array order */
@@ -371,12 +493,15 @@ export class Sift {
         }, {
             key: 'f',
             action: this.actions[Input.Mode.Filter].enterFilterMode,
+        }, {
+            key: 'g',
+            action: this.actions[Input.Mode.Command].gotoLog,
         }];
 
     protected handleQueryInput = (name: any, matches: any, data: any) => {
         if(data.isCharacter) {
             this.currentLogStreamPanel.queryPromptInputPanel.buffer.insert(name);
-			this.onQueryChanged();
+            this.onQueryChanged();
         }
     };
 
@@ -386,6 +511,14 @@ export class Sift {
                 command.action.fn(name, matches, data);
             }
         });
+    };
+
+    protected handleTextInput = (name: any, matches: any, data: any) => {
+        if(data.isCharacter) {
+            this.display.textInputPanel.buffer.insert(name);
+            this.display.textInputPanel.markDirty();
+            this.display.draw();
+        }
     };
 }
 

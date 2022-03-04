@@ -2,7 +2,7 @@ import {terminal, Terminal} from 'terminal-kit';
 import { Subscription } from 'rxjs';
 
 
-import { ScreenPanel } from './panel';
+import { ScreenPanel, TextPanel } from './panel';
 import { CommandPanel } from './commandpanel';
 import { FilterPanel } from './filterpanel';
 import { LogStreamPanel } from './logstreampanel';
@@ -22,6 +22,12 @@ export class Display {
 
     public logStreamPanels: {panel: LogStreamPanel, redrawSubscription: Subscription}[];
     public logStreamPanelIndex: number = 0;
+
+    /** used for arbitrary textual input */
+    public textPanel: ScreenPanel;
+    public textPromptArrowPanel: ScreenPanel;
+    public textLabelPanel: TextPanel;
+    public textInputPanel: TextPanel;
 
     constructor(term?: Terminal) {
         this.terminal = term || terminal;
@@ -59,6 +65,46 @@ export class Display {
             height: 1,
             flex: {width: true},
         });
+
+        this.textPanel = new ScreenPanel(this.rootPanel.buffer, {
+            name: `textPanel`,
+            width: 1,
+            height: 1,
+            flex: {
+                width: true,
+            },
+            drawCursor: true,
+            flexCol: true,
+        });
+
+        this.textPromptArrowPanel = new ScreenPanel(this.textPanel.buffer, {
+            name: `textPanel.promptArrow`,
+            width: 2,
+            height: 1
+        }, () => {
+            (this.textPromptArrowPanel.buffer as any).put({x: 0, y: 0}, '>');
+            (this.textPromptArrowPanel.buffer as any).put({x: 1, y: 0}, ' ');
+        });
+
+        this.textLabelPanel = new TextPanel(this.textPanel.buffer, {
+            name: `textPanel.label`,
+            width: 1,
+            height: 1,
+        });
+
+        this.textInputPanel = new TextPanel(this.rootPanel.buffer, {
+            name: `textPanel.input`,
+            width: 1,
+            height: 1,
+            flex: {
+                width: true,
+            },
+            drawCursor: true
+        });
+
+        this.textPanel.addChild(this.textPromptArrowPanel);
+        this.textPanel.addChild(this.textLabelPanel);
+        this.textPanel.addChild(this.textInputPanel);
 
         this.rootPanel.resize();
 
@@ -144,9 +190,10 @@ export class Display {
     }
 
     public hideCommandPanel() {
-        this.rootPanel.removeChild(this.commandPanel);
-        this.rootPanel.resize();
-        (this.terminal as any).hideCursor(false);
+        if(this.rootPanel.removeChild(this.commandPanel)) {
+            this.rootPanel.resize();
+            (this.terminal as any).hideCursor(false);
+        }
     }
 
     public showFilterPanel() {
@@ -160,8 +207,31 @@ export class Display {
     }
 
     public hideFilterPanel() {
-        this.rootPanel.removeChild(this.filterPanel);
+        if(this.rootPanel.removeChild(this.filterPanel)) {
+            this.rootPanel.resize();
+            (this.terminal as any).hideCursor(false);
+        }
+    }
+
+    public showTextPanel() {
+        if(this.textPanel.parent !== undefined) {
+            return;
+        }
+
+        this.rootPanel.addChild(this.textPanel);
         this.rootPanel.resize();
+
+        this.logPanel.options.drawCursor = false;
         (this.terminal as any).hideCursor(false);
     }
+
+    public hideTextPanel() {
+        if(this.rootPanel.removeChild(this.textPanel)) {
+            this.rootPanel.resize();
+
+            this.logPanel.options.drawCursor = true;
+            (this.terminal as any).hideCursor();
+        }
+    }
+
 }

@@ -130,15 +130,13 @@ export class LogStreamPanel<T extends LogStream = LogStream> extends Panel<Scree
                     // might be aligning too many times
                     this.logDisplayPanel.scrollAlignBottom();
                 }
-
-                this.markDirty();
-                this.logDisplayPanel.markDirty();
-                this.queryResultsPanel.markDirty();
             })
         );
 
         this.logStream.logsObservable.subscribe((record) => {
             if(this.logDisplayPanel.logs === this.logStream.logdb.logs || !this.filter) {
+                this.logDisplayPanel.markDirty();
+                this.queryResultsPanel.markDirty();
                 this.redrawEventsSubject.next(null);
                 return;
             }
@@ -150,6 +148,14 @@ export class LogStreamPanel<T extends LogStream = LogStream> extends Panel<Scree
                 if(this.logDisplayPanel.resultSet) {
                     matches.forEach((match) => ResultSet.addMatch(match, this.logDisplayPanel.resultSet!));
                 }
+
+                this.logDisplayPanel.markDirty();
+                this.queryResultsPanel.markDirty();
+                this.redrawEventsSubject.next(null);
+            }
+            else {
+                // just update the max match count
+                this.queryResultsPanel.markDirty();
                 this.redrawEventsSubject.next(null);
             }
         });
@@ -186,6 +192,7 @@ export class LogStreamPanel<T extends LogStream = LogStream> extends Panel<Scree
             (this.queryResultsPanel.buffer as any).moveTo(0, 0);
             this.queryResultsPanel.buffer.insert(this.spinnerFrames[this.spinnerIndex]);
             this.spinnerIndex = (this.spinnerIndex + 1) % this.spinnerFrames.length;
+            this.queryResultsPanel.markDirty();
         }
 
         (this.queryResultsPanel.buffer as any).moveTo(2, 0);
@@ -287,12 +294,16 @@ export class LogStreamPanel<T extends LogStream = LogStream> extends Panel<Scree
                 this.logDisplayPanel.scrollToSelection();
             }
 
+            this.logDisplayPanel.markDirty();
+            this.queryResultsPanel.markDirty();
             this.redrawEventsSubject.next(null);
             return this.filterSubscription;
         }
 
         this.spinnerIndex = 0;
         this.blockDrawLog = true;
+        this.queryResultsPanel.markDirty();
+        this.redrawEventsSubject.next(null);
         // this.printQueryResults();
 
         /** store logs in reverse order so we can easily iterate from the latest entry */
@@ -351,10 +362,14 @@ export class LogStreamPanel<T extends LogStream = LogStream> extends Panel<Scree
             // tap(() => drawQueryResult()),
         ).subscribe({
             next: () => {
+                this.logDisplayPanel.markDirty();
+                this.queryResultsPanel.markDirty();
                 this.redrawEventsSubject.next(null);
             },
             complete: () => {
                 this.spinnerIndex = -1;
+                this.logDisplayPanel.markDirty();
+                this.queryResultsPanel.markDirty();
                 this.redrawEventsSubject.next(null);
             }
         });
