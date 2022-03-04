@@ -134,9 +134,9 @@ export abstract class Panel<T extends Buffer> {
             this.calculatedHeight = this.options.height;
         }
 
-        if(this.calculatedHeight === 0 || this.calculatedWidth === 0) {
-            throw new Error(`Panel.resize: panel '${this.options.name}' has flex '${JSON.stringify(this.options.flex)}', but does not have its own width/height calculated. Ensure resize() has been drawn on the parent of '${this.options.name}', or disable flex on this panel`);
-        }
+        // if(this.calculatedHeight === 0 || this.calculatedWidth === 0) {
+            // throw new Error(`Panel.resize: panel '${this.options.name}' has flex '${JSON.stringify(this.options.flex)}', but does not have its own width/height calculated. Ensure resize() has been drawn on the parent of '${this.options.name}', or disable flex on this panel`);
+        // }
 
         this.getScreenBuffer().resize({
             x: 0,

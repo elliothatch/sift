@@ -122,6 +122,11 @@ export class Display {
         this.terminal.grabInput(true);
     }
 
+    public shutdown() {
+        this.terminal.fullscreen(false);
+        this.terminal.grabInput(false);
+    }
+
     public draw() {
         // update panel UI
         this.rootPanel.draw();

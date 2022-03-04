@@ -68,7 +68,7 @@ export class CommandPanel extends Panel<ScreenBuffer> {
 
 
         (this.descriptionPanel.buffer as any).moveTo(0,0);
-        this.descriptionPanel.buffer.insert(' '.repeat(this.descriptionPanel.calculatedWidth), {underline: true});
+        this.descriptionPanel.buffer.insert(' '.repeat(Math.max(0, this.descriptionPanel.calculatedWidth)), {underline: true});
         (this.descriptionPanel.buffer as any).moveTo(0,0);
         this.descriptionPanel.buffer.insert('description', {underline: true});
 

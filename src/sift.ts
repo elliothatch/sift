@@ -27,6 +27,8 @@ export class Sift {
         this.display = new Display();
         this.display.init();
 
+        process.on('exit', () => this.display.shutdown());
+
         this.siftLogsSubject = new Subject();
         this.siftLogStream = LogStream.fromObservable('sift', this.siftLogsSubject.asObservable());
         this.siftLogStreamPanel = new LogStreamPanel(this.display.logPanel.buffer, {
@@ -59,6 +61,7 @@ export class Sift {
             },
             [Input.Mode.Filter]: {
                 bindings: this.bindings[Input.Mode.Filter],
+                fallback: this.handleFilterInput,
             },
             [Input.Mode.Text]: {
                 bindings: this.bindings[Input.Mode.Text],
@@ -79,15 +82,16 @@ export class Sift {
 
         this.display.commandPanel.setCommands(this.commands);
 
-        this.display.filterPanel.setRules([{
+        this.display.filterPanel.setRule('e', {
             enabled: false,
             name: 'Error',
             query: 'level:error'
-        }, {
+        });
+        this.display.filterPanel.setRule('w', {
                 enabled: false,
                 name: 'Warning',
                 query: 'level:warn'
-        }]);
+        });
 
     }
 
@@ -95,7 +99,7 @@ export class Sift {
         // TODO: error handling
         const stream = LogStream.fromProcess(exec, args);
         const panel = new LogStreamPanel(this.display.logPanel.buffer, {
-            name: `log.logStream.${this.display.logPanel.children.length}}`,
+            name: `log.logStream.${this.display.logPanel.children.length}`,
             width: 1,
             height: 1,
             flex: {
@@ -123,7 +127,7 @@ export class Sift {
     }
 
     public close() {
-        this.display.terminal.fullscreen(false);
+        this.display.shutdown();
         this.logStreams.forEach(({stream, panel}) => {
             if(stream.source.sType === 'process' && stream.source.running) {
                 stream.source.process.kill();
@@ -147,17 +151,18 @@ export class Sift {
         this.queryChangedSubject.next(this.currentLogStreamPanel);
     }
 
-    public promptTextInput(label: string, onSubmit: (text: string) => void, onCancel?: () => void) {
+    public promptTextInput(label: string, onSubmit: (text: string) => void, onCancel?: () => void, startingText?: string) {
         const labelText = label + ': ';
         this.display.textLabelPanel.options.width = labelText.length;
         this.display.showTextPanel();
 
-        (this.display.textInputPanel.buffer as any).moveTo(0,0);
-        (this.display.textInputPanel.buffer as any).setText('');
+        (this.display.textInputPanel.buffer as any).moveTo(startingText?.length || 0);
+        (this.display.textInputPanel.buffer as any).setText(startingText || '');
 
         (this.display.textLabelPanel.buffer as any).moveTo(0,0);
         (this.display.textLabelPanel.buffer as any).setText(labelText);
 
+        this.display.textLabelPanel.markDirty();
         this.display.textLabelPanel.markDirty();
 
         this.textPromptOnSubmit = onSubmit;
@@ -531,6 +536,70 @@ export class Sift {
             this.display.textInputPanel.buffer.insert(name);
             this.display.textInputPanel.markDirty();
             this.display.draw();
+        }
+    };
+
+    protected handleFilterInput = (name: string, matches: any, data: any) => {
+        // TODO: make rules for each logstream independent
+        if(data.code >= 97 && data.code <= 122) {
+            // lowercase alphabet
+            // toggle the filter
+            const rule = this.display.filterPanel.rules[name];
+            if(rule) {
+                rule.enabled = !rule.enabled;
+                this.display.filterPanel.markDirty();
+                this.currentLogStreamPanel.filterRules = Object.values(this.display.filterPanel.rules);
+                this.currentLogStreamPanel.setQuery((this.currentLogStreamPanel.queryPromptInputPanel.buffer as any).getText());
+                this.display.draw();
+            }
+        }
+        else if(data.code >= 65 && data.code <= 90) {
+            // uppercase alphabet
+            // edit or create a rule
+            const onCancel = () => {
+                this.input.mode = Input.Mode.Filter;
+                this.display.draw();
+            };
+            const rule = this.display.filterPanel.rules[name.toLowerCase()];
+            if(rule) {
+                // edit
+                this.promptTextInput(`Edit filter '${name.toLowerCase()}' (name)`, (filterName) => {
+                    this.promptTextInput(`Edit filter '${name.toLowerCase()}' (query)`, (query) => {
+                        this.display.filterPanel.setRule(name.toLowerCase(), {
+                            enabled: true,
+                            name: filterName,
+                            query
+                        });
+                        this.input.mode = Input.Mode.Filter;
+                        this.display.filterPanel.markDirty();
+                        this.currentLogStreamPanel.filterRules = Object.values(this.display.filterPanel.rules);
+                        this.currentLogStreamPanel.setQuery((this.currentLogStreamPanel.queryPromptInputPanel.buffer as any).getText());
+                        this.display.draw();
+                    },
+                        onCancel,
+                        rule.query);
+                },
+                    onCancel,
+                    rule.name,
+                );
+            }
+            else {
+                // create
+                this.promptTextInput(`New filter '${name.toLowerCase()}' (name)`, (filterName) => {
+                    this.promptTextInput(`New filter '${name.toLowerCase()}' (query)`, (query) => {
+                        this.display.filterPanel.setRule(name.toLowerCase(), {
+                            enabled: true,
+                            name: filterName,
+                            query
+                        });
+                        this.input.mode = Input.Mode.Filter;
+                        this.display.filterPanel.markDirty();
+                        this.currentLogStreamPanel.filterRules = Object.values(this.display.filterPanel.rules);
+                        this.currentLogStreamPanel.setQuery((this.currentLogStreamPanel.queryPromptInputPanel.buffer as any).getText());
+                        this.display.draw();
+                    }, onCancel);
+                }, onCancel);
+            }
         }
     };
 }
