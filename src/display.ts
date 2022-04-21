@@ -17,6 +17,7 @@ export class Display {
     public rootPanel: ScreenPanel;
     public logPanel: ScreenPanel;
 
+    public queryKeyPanel: TextPanel;
     public commandPanel: CommandPanel;
     public filterPanel: FilterPanel;
 
@@ -51,6 +52,30 @@ export class Display {
         });
 
         this.rootPanel.addChild(this.logPanel);
+
+        this.queryKeyPanel = new TextPanel(this.rootPanel.buffer, {
+            name: 'query-keys',
+            width: 1,
+            height: 1,
+            flex: {width: true}
+        }, () => {
+            (this.queryKeyPanel.buffer as any).setText('');
+            (this.queryKeyPanel.buffer as any).moveTo(0, 0);
+            // TODO: instead of hardcoding these values, get them from the input bindings? probably not worth it.
+            const bindings = [
+                ['CTRL_C', 'EXIT'],
+                ['\\', 'COMMANDS'],
+                ['🡸🡺🡹🡻', 'SCROLL'],
+                ['SHIFT_🡸🡺', 'MOVE QUERY CURSOR'],
+            ];
+            bindings.forEach(([binding, command]) => {
+                this.queryKeyPanel.buffer.insert(binding, {inverse: true, bold: true});
+                this.queryKeyPanel.buffer.insert(' ' + command);
+                this.queryKeyPanel.buffer.insert('    ');
+            });
+        });
+
+        this.rootPanel.addChild(this.queryKeyPanel);
 
         this.commandPanel = new CommandPanel(this.rootPanel.buffer, {
             name: 'command',
@@ -237,6 +262,21 @@ export class Display {
 
             this.logPanel.options.drawCursor = true;
             (this.terminal as any).hideCursor();
+        }
+    }
+
+    public showQueryKeyPanel() {
+        if(this.queryKeyPanel.parent !== undefined) {
+            return;
+        }
+
+        this.rootPanel.addChild(this.queryKeyPanel);
+        this.rootPanel.resize();
+    }
+
+    public hideQueryKeyPanel() {
+        if(this.rootPanel.removeChild(this.queryKeyPanel)) {
+            this.rootPanel.resize();
         }
     }
 

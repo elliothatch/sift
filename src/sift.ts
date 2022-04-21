@@ -92,6 +92,16 @@ export class Sift {
                 name: 'Warning',
                 query: 'level:warn'
         });
+        this.display.filterPanel.setRule('i', {
+                enabled: false,
+                name: 'Info',
+                query: 'level:info'
+        });
+        this.display.filterPanel.setRule('t', {
+                enabled: false,
+                name: 'Trace',
+                query: 'level:trace'
+        });
 
     }
 
@@ -172,6 +182,7 @@ export class Sift {
     public promptTextInput(label: string, onSubmit: (text: string) => void, onCancel?: () => void, startingText?: string) {
         const labelText = label + ': ';
         this.display.textLabelPanel.options.width = labelText.length;
+        this.display.hideQueryKeyPanel();
         this.display.showTextPanel();
 
         (this.display.textInputPanel.buffer as any).moveTo(startingText?.length || 0);
@@ -274,7 +285,7 @@ export class Sift {
                     this.display.draw();
                 }
             },
-            'scrollUp': {
+            'moveSelectionUp': {
                 description: 'Move selection up one log',
                 fn: () => {
                     this.currentLogStreamPanel.logDisplayPanel.moveSelectionUp(1);
@@ -284,13 +295,48 @@ export class Sift {
                     this.display.draw();
                 }
             },
-            'scrollDown': {
+            'moveSelectionDown': {
                 description: 'Move selection down one log',
                 fn: () => {
                     this.currentLogStreamPanel.logDisplayPanel.moveSelectionDown(1);
                     this.currentLogStreamPanel.logDisplayPanel.scrollToSelection();
                     this.currentLogStreamPanel.autoscroll = false;
                     this.currentLogStreamPanel.queryResultsPanel.markDirty();
+                    this.display.draw();
+                }
+            },
+            'scrollUp': {
+                description: 'Scroll display up',
+                fn: () => {
+                    this.currentLogStreamPanel.logDisplayPanel.scrollUp(1);
+                    const bottomPosition = this.currentLogStreamPanel.logDisplayPanel.getBottomPosition();
+                    if(bottomPosition && this.currentLogStreamPanel.logDisplayPanel.selectionIndex > bottomPosition.entryIndex) {
+                        this.currentLogStreamPanel.logDisplayPanel.moveSelectionUp(1);
+                    }
+                    this.display.draw();
+                }
+            },
+            'scrollDown': {
+                description: 'Scroll display down',
+                fn: () => {
+                    this.currentLogStreamPanel.logDisplayPanel.scrollDown(1);
+                    if(this.currentLogStreamPanel.logDisplayPanel.selectionIndex < this.currentLogStreamPanel.logDisplayPanel.scrollLogIndex) {
+                        this.currentLogStreamPanel.logDisplayPanel.moveSelectionDown(1);
+                    }
+                    this.display.draw();
+                }
+            },
+            'scrollLeft': {
+                description: 'Scroll display to the left',
+                fn: () => {
+                    this.currentLogStreamPanel.logDisplayPanel.scrollLeft(5);
+                    this.display.draw();
+                }
+            },
+            'scrollRight': {
+                description: 'Scroll display to the right',
+                fn: () => {
+                    this.currentLogStreamPanel.logDisplayPanel.scrollRight(5);
                     this.display.draw();
                 }
             },
@@ -385,6 +431,7 @@ export class Sift {
                 fn: () => {
                     this.input.mode = Input.Mode.Command;
                     this.display.showCommandPanel();
+                    this.display.hideQueryKeyPanel();
                     this.display.draw();
                 }
             },
@@ -393,6 +440,7 @@ export class Sift {
                 fn: () => {
                     this.input.mode = Input.Mode.Query;
                     this.display.hideCommandPanel();
+                    this.display.showQueryKeyPanel();
                     this.display.draw();
                 }
             // commands
@@ -480,6 +528,7 @@ export class Sift {
                 fn: () => {
                     this.input.mode = Input.Mode.Filter;
                     this.display.hideCommandPanel();
+                    this.display.hideQueryKeyPanel();
                     this.updateFilterPanel(this.currentLogStreamPanel);
                     this.display.showFilterPanel();
                     this.display.draw();
@@ -490,6 +539,7 @@ export class Sift {
                 fn: () => {
                     this.input.mode = Input.Mode.Query;
                     this.display.hideFilterPanel();
+                    this.display.showQueryKeyPanel();
                     this.display.draw();
                 }
             },
@@ -515,6 +565,7 @@ export class Sift {
                 description: 'Submit the text input and close the prompt',
                 fn: () => {
                     this.display.hideTextPanel();
+                    this.display.showQueryKeyPanel();
                     // default to query mode. onSubmit may override this
                     this.input.mode = Input.Mode.Query;
                     (this.display.terminal as any).hideCursor(false);
@@ -530,6 +581,7 @@ export class Sift {
                 description: 'Cancel text input and close the prompt',
                 fn: () => {
                     this.display.hideTextPanel();
+                    this.display.showQueryKeyPanel();
                     // default to query mode. onCancel may override this
                     this.input.mode = Input.Mode.Query;
                     (this.display.terminal as any).hideCursor(false);
@@ -586,16 +638,24 @@ export class Sift {
             'CTRL_H': this.actions[Input.Mode.Query].selectPanelLeft,
             'CTRL_RIGHT': this.actions[Input.Mode.Query].selectPanelRight,
             'CTRL_L': this.actions[Input.Mode.Query].selectPanelRight,
+
             'ENTER': this.actions[Input.Mode.Query].toggleSelection,
             'KP_ENTER': this.actions[Input.Mode.Query].toggleSelection,
-            'UP': this.actions[Input.Mode.Query].scrollUp,
-            'DOWN': this.actions[Input.Mode.Query].scrollDown,
+            'UP': this.actions[Input.Mode.Query].moveSelectionUp,
+            'DOWN': this.actions[Input.Mode.Query].moveSelectionDown,
+            'LEFT': this.actions[Input.Mode.Query].scrollLeft,
+            'RIGHT': this.actions[Input.Mode.Query].scrollRight,
             'PAGE_UP': this.actions[Input.Mode.Query].pageUp,
             'PAGE_DOWN': this.actions[Input.Mode.Query].pageDown,
             'HOME': this.actions[Input.Mode.Query].scrollStart,
             'END': this.actions[Input.Mode.Query].scrollEnd,
-            'LEFT': this.actions[Input.Mode.Query].queryCursorLeft,
-            'RIGHT': this.actions[Input.Mode.Query].queryCursorRight,
+
+            'SHIFT_LEFT': this.actions[Input.Mode.Query].queryCursorLeft,
+            'SHIFT_RIGHT': this.actions[Input.Mode.Query].queryCursorRight,
+            // 'SHIFT_UP': this.actions[Input.Mode.Query].queryHistoryBack,
+            // 'SHIFT_DOWN': this.actions[Input.Mode.Query].queryHistoryForward,
+            'CTRL_E': this.actions[Input.Mode.Query].scrollDown,
+            'CTRL_Y': this.actions[Input.Mode.Query].scrollUp,
             'BACKSPACE': this.actions[Input.Mode.Query].backspace,
             'DELETE': this.actions[Input.Mode.Query].delete,
             'ESCAPE': this.actions[Input.Mode.Query].clearQuery,
@@ -605,6 +665,17 @@ export class Sift {
             'CTRL_C': this.actions[Input.Mode.Command].exitCommandMode,
             'ESCAPE': this.actions[Input.Mode.Command].exitCommandMode,
             'BACKSPACE': this.actions[Input.Mode.Command].exitCommandMode,
+
+            'ENTER': this.actions[Input.Mode.Query].toggleSelection,
+            'KP_ENTER': this.actions[Input.Mode.Query].toggleSelection,
+            'UP': this.actions[Input.Mode.Query].moveSelectionUp,
+            'DOWN': this.actions[Input.Mode.Query].moveSelectionDown,
+            'LEFT': this.actions[Input.Mode.Query].scrollLeft,
+            'RIGHT': this.actions[Input.Mode.Query].scrollRight,
+            'PAGE_UP': this.actions[Input.Mode.Query].pageUp,
+            'PAGE_DOWN': this.actions[Input.Mode.Query].pageDown,
+            'HOME': this.actions[Input.Mode.Query].scrollStart,
+            'END': this.actions[Input.Mode.Query].scrollEnd,
         },
         [Input.Mode.Filter]: {
             'CTRL_C': this.actions[Input.Mode.Filter].exitFilterMode,
@@ -614,6 +685,17 @@ export class Sift {
             'CTRL_H': this.actions[Input.Mode.Filter].selectPanelLeft,
             'CTRL_RIGHT': this.actions[Input.Mode.Filter].selectPanelRight,
             'CTRL_L': this.actions[Input.Mode.Filter].selectPanelRight,
+
+            'ENTER': this.actions[Input.Mode.Query].toggleSelection,
+            'KP_ENTER': this.actions[Input.Mode.Query].toggleSelection,
+            'UP': this.actions[Input.Mode.Query].moveSelectionUp,
+            'DOWN': this.actions[Input.Mode.Query].moveSelectionDown,
+            'LEFT': this.actions[Input.Mode.Query].scrollLeft,
+            'RIGHT': this.actions[Input.Mode.Query].scrollRight,
+            'PAGE_UP': this.actions[Input.Mode.Query].pageUp,
+            'PAGE_DOWN': this.actions[Input.Mode.Query].pageDown,
+            'HOME': this.actions[Input.Mode.Query].scrollStart,
+            'END': this.actions[Input.Mode.Query].scrollEnd,
         },
         [Input.Mode.Text]: {
             'CTRL_C': this.actions[Input.Mode.Text].cancelText,

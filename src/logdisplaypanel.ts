@@ -38,6 +38,10 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
     public scrollLogIndex: number = 0;
     /** line we have scrolled to within the scrollLogIdx record */
     public scrollPosition: number = 0;
+    /** column we have to scrolled to. applied globally to entire display */
+    public horizontalScrollPosition: number = 0;
+    /** when the logs are rendered, this is set to the length of the longest visible line, preventing overscroll */
+    public horizontalScrollMax: number = 0;
     /** set of all logs that are expanded */
     public expandedLogs: Set<LogIdx>;
 
@@ -100,6 +104,7 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
     }
 
     public render: () => void = () => {
+        let logMaxLength = 0;
         this.logPanel.buffer.fill({char: ' '});
         this.logPanel.buffer.moveTo(0, 0);
         (this.idxPanel.buffer as any).setText('');
@@ -120,7 +125,7 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
                 this.printIdx(record.idx, i);
             }
 
-            this.printLogEntry(logEntry, i, entryScrollPos);
+            this.printLogEntry(logEntry, i, entryScrollPos, this.horizontalScrollPosition);
             if(this.selectionIndex === entryIdx && this.selectionScrollPosition === entryScrollPos) {
                 // invert the colors of the selected row
                 for(let col = 0; col < this.logPanel.calculatedWidth; col++) {
@@ -140,6 +145,15 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
             }
             // this.redrawChildren();
             // this.draw();
+            logMaxLength = Math.max(logMaxLength, logEntry.getContentSize().width);
+        }
+
+        this.horizontalScrollMax = Math.max(0, logMaxLength - this.logPanel.calculatedWidth);
+
+        // if all lines on the screen are so short that we have over-horizontal scrolled, scroll left so the longest line is on the the right side of the screen, then render again
+        if(this.horizontalScrollPosition > this.horizontalScrollMax) {
+            this.horizontalScrollPosition = this.horizontalScrollMax;
+            this.render();
         }
 
         this.idxPanel.markDirty();
@@ -214,13 +228,13 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
     }
 
     /** prints a single line of a log entry */
-    public printLogEntry(logEntry: TextBuffer, row: number, scrollPosition: number) {
+    public printLogEntry(logEntry: TextBuffer, row: number, scrollPosition: number, horizontalScrollPosition: number) {
         (logEntry as any).draw({
             dst: this.logPanel.getScreenBuffer(),
-            x: 0,
+            x: -horizontalScrollPosition,
             y: row - scrollPosition,
             srcClipRect: {
-                x: 0,
+                x: horizontalScrollPosition,
                 y: scrollPosition,
                 width: this.logPanel.calculatedWidth,
                 height: 1,
@@ -494,6 +508,29 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
         this.markDirty();
     }
 
+    public scrollLeft(count: number) {
+        let lastScroll = this.horizontalScrollPosition;
+        this.horizontalScrollPosition = Math.max(0, this.horizontalScrollPosition - count);
+        if(lastScroll !== this.horizontalScrollPosition) {
+            this.markDirty();
+        }
+    }
+
+    public scrollRight(count: number) {
+        if(this.horizontalScrollPosition > this.horizontalScrollMax) {
+            // vertical scrolling has reduced the max scroll past where we are horizontally scrolled
+            // do nothing so we don't jump the scroll to the left
+            return;
+        }
+
+        let lastScroll = this.horizontalScrollPosition;
+        this.horizontalScrollPosition = Math.min(this.horizontalScrollPosition + count, this.horizontalScrollMax);
+
+        if(lastScroll !== this.horizontalScrollPosition) {
+            this.markDirty();
+        }
+    }
+
 
     /**
 * @returns true if the log was expanded, and false if it was collapsed, or selection is invalid 
@@ -527,6 +564,7 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
     /** scrolls the view to ensure the maxiumum amount of the specified log is shown.
     * ensures the beginning of the log is visible, then scrolls down as much as possible to fit the rest of the log onscreen
     * tries to not unnecessarily scroll the screen
+* TODO: if the log is really big, it will scroll to the end. we probably want to keep the first line of the log at the top of the screen instead
     */
     public scrollToMaximizeLog(entryIndex: number) {
         if(entryIndex < this.scrollLogIndex) {

@@ -92,7 +92,10 @@ rxjs.timer(0, logDelay).subscribe((x) => {
 		level = 'trace';
 	}
 
-	const message = messageNouns[Math.floor(Math.random()*messageNouns.length)] + ' ' + messageVerbs[Math.floor(Math.random()*messageVerbs.length)] + ` '${randomString(Math.floor(Math.random() * 12))}'` ;
+	let message = messageNouns[Math.floor(Math.random()*messageNouns.length)] + ' ' + messageVerbs[Math.floor(Math.random()*messageVerbs.length)] + ` '${randomString(Math.floor(Math.random() * 12))}'` ;
+	if(Math.random() < 0.05) {
+		message += randomString(80) + 'end';
+	}
 	freshlog.Log.log(
 		level,
 		message,

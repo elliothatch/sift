@@ -223,6 +223,12 @@ export class LogStreamPanel<T extends LogStream = LogStream> extends Panel<Scree
         this.queryResultsPanel.buffer.insert(`${this.logDisplayPanel.logs.length}/${this.logStream.logdb.logs.length}`);
         this.queryResultsPanel.buffer.insert(` `);
 
+        const filterCount = Object.values(this.filterRules).filter((rule) => rule.enabled).length;
+        if(filterCount > 0) {
+            this.queryResultsPanel.buffer.insert(`(${filterCount} filters)`);
+            this.queryResultsPanel.buffer.insert(` `);
+        }
+
         if(this.logDisplayPanel.scrollLogIndex > 0) {
             this.queryResultsPanel.buffer.insert(`[${this.logDisplayPanel.scrollLogIndex} above]`, {dim:true});
         }
