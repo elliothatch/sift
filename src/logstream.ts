@@ -69,13 +69,17 @@ export class LogStream<T extends LogStream.Source<K> = LogStream.Source<any>, K 
         targetProcess.on('exit', (code, signal) => {
             source.running = false;
             // TODO: show these logs in a separate "sift messages" panel
-            logStream.logdb.ingest(JSON.stringify({
+            const record = logStream.logdb.ingest(JSON.stringify({
                 level: 'warn',
                 message: `Child source "${targetProcess.spawnfile}" (${targetProcess.pid}) exited with ${code != null? 'code "' + code + '"': 'signal "' + signal + '"'}`
             }));
-            logStream.logdb.ingest(JSON.stringify({
+            logStream.logsSubject.next(record);
+
+            const record2 = logStream.logdb.ingest(JSON.stringify({
                 level: 'warn', message: `Press CTRL_C to close`
             }));
+
+            logStream.logsSubject.next(record2);
         });
 
         return logStream;

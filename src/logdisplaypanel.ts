@@ -3,17 +3,31 @@ import {Attributes, Terminal, Buffer, ScreenBuffer, TextBuffer} from 'terminal-k
 import { Panel, ScreenPanel, TextPanel } from './panel';
 import {LogRecord, LogIdx, PropertyId, ResultSet, FilterMatch } from './logdb';
 
+export type FormatCondition = (property: string, value: any, substitution: LogSubstitution) => boolean;
+
 /** a substitution in a format string */
 export interface LogSubstitution {
-    /** name of the property whose value will be substituted. nested properties can be specified with dot notation */
+    /** name of the property whose value will be substituted. nested properties can be specified with dot notation.
+      * the value of the property SHOULD NOT be an object, since the it will be displayed in a single-line string. */
     property: string;
+    /** universal attributes applied to the substitution */
     attributes?: Attributes;
+    /** if a format condition is fulfilled, merge its attributes with the universal attributes, overwriting collisions. merges are performed in array order */
+    conditionalAttributes?: Array<{condition: FormatCondition, attributes: Attributes}>;
     /** string to prefix substitution, only used if property value is not null */
     prefix?: string;
     /** string to suffix substitution, only used if property value is not null */
     suffix?: string;
     /** by default, if the value of a property is undefined or null, the entire substitution is ignored and nothing is printed. if showNull is set to true, null/undefined values will be be displayed. in this case, prefix and suffix are always printed. */
     showNull?: boolean;
+}
+
+export interface LogFormat {
+    /** array elements are concatenated together to create the log summary string */
+    text: Array<LogSubstitution | string>;
+    /** attributes and conditional attributes for each LogSubstitution are merged into these global attributes before substitutions are applied, allowing for formatting across the entire string (e.g. color all text red on an error */
+    attributes?: Attributes;
+    conditionalAttributes?: Array<{condition: FormatCondition, attributes: Attributes}>;
 }
 
 export class LogDisplayPanel extends Panel<ScreenBuffer> {
@@ -26,7 +40,7 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
     public resultSet?: ResultSet;
     // public expandedView: boolean;
     public logLevelColors: {[level: string]: string};
-    public logFormat: Array<string | LogSubstitution>;
+    public logFormat: LogFormat;
 
     // add doubly linked list of items to make it an LRU cache
     // each node stores a TextBuffer which is filled with formatted text
@@ -90,7 +104,32 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
             default: 'grey',
         };
 
-        this.logFormat = this.parseLogFormat('{timestamp|dim|[|]}][{level|dim|[|]}]{message}');
+        this.logFormat = {
+            text: [{
+                property: 'timestamp',
+                attributes: {dim: true},
+                prefix: '[',
+                suffix: ']',
+            }, {
+                property: 'level',
+                attributes: {dim: true},
+                prefix: '[',
+                suffix: ']',
+            }, {
+                property: 'message'
+            }],
+            attributes: {color: 'grey'},
+            conditionalAttributes: [{
+                condition: (property, value) => property === 'level' && value === 'error',
+                attributes: {color: 'red'}
+            }, {
+                condition: (property, value) => property === 'level' && value === 'warn',
+                attributes: {color: 'yellow'}
+            }, {
+                condition: (property, value) => property === 'level' && value === 'info',
+                attributes: {bold: true}
+            }]
+        };
 
 
         this.addChild(this.idxPanel);
@@ -101,6 +140,7 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
     public resize(): void {
         super.resize();
         this.logEntryCache.clear();
+        this.scrollToMaximizeLog(this.selectionIndex);
     }
 
     public render: () => void = () => {
@@ -158,18 +198,6 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
 
         this.idxPanel.markDirty();
         this.logPanel.markDirty();
-    }
-
-    /** @param formatStr - a format string used to color, style, and substitute values in the log summary
-    * substitutions are indictated with curly braces {property|attributes|prefix|suffix}
-    * attributes is a comma separated list of name:value pairs of terminal-kit attributes
-    * see interface LogSubstitution for more details
-    * TODO: should the substituions just be a json object used with JSON.parse? that seems overly verbose, but also easy to implement. also you don't have to memorize the order, and there is only one "definition" of the log format (interface LogSubstitution)
-    * @returns array of strings and substitutions, which will be concatenated to create the log string
-    */
-    public parseLogFormat(formatStr: string): Array<string | LogSubstitution> {
-        // TODO: parse format str
-        return [];
     }
 
     public getScreenBuffer(): ScreenBuffer {
@@ -337,6 +365,7 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
         this.markDirty();
     }
 
+    // TODO: when there are fewer logs to display than the height of the screen, scrollDown/scrollUp determine scroll bounds with top-alignment. every other scroll function uses bottom-alignment, resulting in strange and incorrect behavior.
     public scrollDown(count: number) {
         for(let i = 0; i < count; i++) {
             const record = this.logs[this.scrollLogIndex];

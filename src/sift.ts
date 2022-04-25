@@ -453,6 +453,17 @@ export class Sift {
                     this.onQueryChanged();
                 }
             },
+            'closeWindow': {
+                description: 'close the current log panel',
+                fn: (key, matches, data) => {
+                    if(this.display.logStreamPanels.length > 1) {
+                        this.display.hideLogStreamPanel(this.currentLogStreamPanel);
+                        this.currentLogStreamPanel = this.display.logStreamPanels[this.display.logStreamPanelIndex].panel;
+                    }
+
+                    this.actions[Input.Mode.Command].exitCommandMode.fn(key, matches, data);
+                }
+            },
             'gotoLog': {
                 description: 'goto log',
                 fn: (key, matches, data) => {
@@ -483,6 +494,32 @@ export class Sift {
                         }
                         this.display.draw();
                     });
+                }
+            },
+            'splitWindowVertical': {
+                description: 'split the current log panel into two windows',
+                fn: (key, matches, data) => {
+                    const stream = this.currentLogStreamPanel.logStream;
+                    const panel = new LogStreamPanel(this.display.logPanel.buffer, {
+                        name: `log.logStream.${this.display.logPanel.children.length}`,
+                        width: 1,
+                        height: 1,
+                        flex: {
+                            width: true,
+                            height: true,
+                        },
+                    }, stream);
+
+                    this.display.showLogStreamPanel(panel);
+                    panel.options.drawCursor = true;
+
+                    this.logStreams.push({stream, panel});
+
+                    // select the new log stream, which will be at the end
+                    this.display.selectLogStreamPanel(this.display.logStreamPanels.length - 1);
+                    this.currentLogStreamPanel = panel;
+
+                    this.actions[Input.Mode.Command].exitCommandMode.fn(key, matches, data);
                 }
             },
             'displayHelp': {
@@ -717,11 +754,17 @@ export class Sift {
             key: 'f',
             action: this.actions[Input.Mode.Filter].enterFilterMode,
         }, {
+            key: 'c',
+            action: this.actions[Input.Mode.Command].closeWindow,
+        }, {
             key: 'g',
             action: this.actions[Input.Mode.Command].gotoLog,
         }, {
             key: 's',
             action: this.actions[Input.Mode.Command].spawnProcess,
+        }, {
+            key: 'v',
+            action: this.actions[Input.Mode.Command].splitWindowVertical,
         }, {
             key: '?',
             action: this.actions[Input.Mode.Command].displayHelp,
