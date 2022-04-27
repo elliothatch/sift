@@ -131,8 +131,9 @@ export class Sift {
     public terminateProcess(logStream: LogStream<LogStream.Source.Process>) {
         if(logStream.source.running) {
             logStream.logdb.ingest(JSON.stringify({
-                level: 'warn',
-                message: `Sending SIGTERM to child process "${logStream.source.process.spawnfile}" (${logStream.source.process.pid})`
+                level: 'sift',
+                message: `Sending SIGTERM to child process "${logStream.source.process.spawnfile}" (${logStream.source.process.pid})`,
+                timestamp: new Date().toISOString(),
             }));
             logStream.source.process.kill();
         }
@@ -236,14 +237,16 @@ export class Sift {
                                 logSource.subscription = undefined
                                 this.currentLogStreamPanel.logStream.logsSubject.next(
                                     this.currentLogStreamPanel.logStream.logdb.ingest(JSON.stringify({
-                                    level: 'warn',
-                                    message: `Unsubscribing...`
+                                    level: 'sift',
+                                    message: `Unsubscribing...`,
+                                    timestamp: new Date().toISOString(),
                                     }))
                                 );
                                 this.currentLogStreamPanel.logStream.logsSubject.next(
                                     this.currentLogStreamPanel.logStream.logdb.ingest(JSON.stringify({
-                                    level: 'warn',
-                                    message: `Press CTRL_C to close`
+                                    level: 'sift',
+                                    message: `Press CTRL_C to close`,
+                                    timestamp: new Date().toISOString(),
                                     }))
                                 );
                                 this.currentLogStreamPanel.markDirty();

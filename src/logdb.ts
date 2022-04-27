@@ -677,7 +677,7 @@ function parseErrorLog(line: string) {
  * @argument obj - root object
  * @argument propertyName - name of the property to retrieved. Nested properties are specified with dot notation ('a.b.c')
  */
-function getProperty(obj: {[property: string]: any}, property: PropertyId): any {
+export function getProperty(obj: {[property: string]: any}, property: PropertyId): any {
     if(!obj) {
         return undefined;
     }

@@ -1,9 +1,14 @@
 import {Attributes, Terminal, Buffer, ScreenBuffer, TextBuffer} from 'terminal-kit';
 
 import { Panel, ScreenPanel, TextPanel } from './panel';
-import {LogRecord, LogIdx, PropertyId, ResultSet, FilterMatch } from './logdb';
+import {LogRecord, LogIdx, PropertyId, ResultSet, FilterMatch, getProperty } from './logdb';
 
-export type FormatCondition = (property: string, value: any, substitution: LogSubstitution) => boolean;
+/** 
+* @param property - name of the property this log substitution applies to. if it is a top-level condition (in LogFormat), or a 'static' FormatString, it is the empty string
+* @param value - value of the property. if a top-level condition, will be the log itself
+* @param record - full log record this substitution is being applied to
+* if returns true, the associated format will be applied to the log */
+export type FormatCondition = (property: string, value: any, record: LogRecord) => boolean;
 
 /** a substitution in a format string */
 export interface LogSubstitution {
@@ -22,9 +27,15 @@ export interface LogSubstitution {
     showNull?: boolean;
 }
 
+export interface FormatString {
+    text: string;
+    attributes?: Attributes;
+    conditionalAttributes?: Array<{condition: FormatCondition, attributes: Attributes}>;
+}
+
 export interface LogFormat {
     /** array elements are concatenated together to create the log summary string */
-    text: Array<LogSubstitution | string>;
+    format: Array<LogSubstitution | FormatString>;
     /** attributes and conditional attributes for each LogSubstitution are merged into these global attributes before substitutions are applied, allowing for formatting across the entire string (e.g. color all text red on an error */
     attributes?: Attributes;
     conditionalAttributes?: Array<{condition: FormatCondition, attributes: Attributes}>;
@@ -105,7 +116,7 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
         };
 
         this.logFormat = {
-            text: [{
+            format: [{
                 property: 'timestamp',
                 attributes: {dim: true},
                 prefix: '[',
@@ -116,18 +127,21 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
                 prefix: '[',
                 suffix: ']',
             }, {
-                property: 'message'
+                property: 'message',
             }],
             attributes: {color: 'grey'},
             conditionalAttributes: [{
-                condition: (property, value) => property === 'level' && value === 'error',
+                condition: (_property, value) => value?.level === 'error',
                 attributes: {color: 'red'}
             }, {
-                condition: (property, value) => property === 'level' && value === 'warn',
+                condition: (_property, value) => value?.level === 'warn',
                 attributes: {color: 'yellow'}
             }, {
-                condition: (property, value) => property === 'level' && value === 'info',
-                attributes: {bold: true}
+                condition: (_property, value) => value?.level === 'info',
+                attributes: {color: 'white'}
+            }, {
+                condition: (_property, value) => value?.level === 'sift',
+                attributes: {color: 'cyan'}
             }]
         };
 
@@ -204,6 +218,14 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
         return this.buffer;
     }
 
+    public setLogFormat(logFormat: LogFormat) {
+        this.logFormat = logFormat;
+        this.logEntryCache.clear();
+
+        this.idxPanel.markDirty();
+        this.logPanel.markDirty();
+    }
+
     public createLogEntry(record: LogRecord): TextBuffer {
         const textBuffer = new TextBuffer({
             dst: this.logPanel.getScreenBuffer(),
@@ -213,7 +235,8 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
         const printOptions: LogDisplayPanel.PrintOptions = {
             dst: textBuffer,
             matches: this.resultSet && this.resultSet.matches,
-            logLevelColors: this.logLevelColors,
+            // logLevelColors: this.logLevelColors,
+            format: this.logFormat,
             expandedView: this.expandedLogs.has(record.idx),
             indentStr: ' '.repeat(4),
         };
@@ -670,44 +693,57 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
         this.idxPanel.buffer.insert(idxStr, attr);
     }
 
+    public static evaluateConditionalAttributes(baseAttributes: Attributes | undefined, conditionalAttributes: Array<{condition: FormatCondition, attributes: Attributes}> | undefined, property: string, value: any, record: LogRecord): Attributes {
+        if(!conditionalAttributes) {
+            return {...baseAttributes};
+        }
+        return conditionalAttributes.reduce((attr, {condition, attributes}) => {
+            if(condition(property, value, record)) {
+                return Object.assign(attr, attributes);
+            }
+            return attr;
+        }, {...baseAttributes});
+    }
+
     public static printLog(record: LogRecord, printOptions: LogDisplayPanel.PrintOptions): number {
-        let messageColor = printOptions.logLevelColors.default;
-        if(record.log && record.log.level && printOptions.logLevelColors[record.log.level]) {
-            messageColor = printOptions.logLevelColors[record.log.level];
-        }
+        const valueMatchAttr = {color: 'blue'};
 
-        if(record.log.timestamp !== undefined) {
-            // don't allow dim gray as it becomes the background color
-            const timestampColor = messageColor === 'grey'? 'white' : messageColor;
-            printOptions.dst.insert('[', {color: timestampColor, dim: true});
-            LogDisplayPanel.printHighlightedText(record.log.timestamp, printOptions.dst, LogDisplayPanel.getValueHighlightIndexes(record.idx, 'timestamp', printOptions.matches), {color: timestampColor, dim: true}, {color: 'blue'});
-            printOptions.dst.insert(']', {color: timestampColor, dim: true});
-        }
+        const globalAttributes = LogDisplayPanel.evaluateConditionalAttributes(printOptions.format.attributes, printOptions.format.conditionalAttributes, '', record.log, record);
+        const textParts = printOptions.format.format.map((substitution) => {
+            const {property, value} = 'property' in substitution?
+                {property: substitution.property, value: getProperty(record.log, substitution.property)}:
+                {property: '', value: substitution.text};
 
-        if(record.log.level !== undefined) {
-            // don't allow dim gray as it becomes the background color
-            const levelColor = messageColor === 'grey'? 'white' : messageColor;
-            printOptions.dst.insert('[', {color: levelColor, dim: true});
-            LogDisplayPanel.printHighlightedText(record.log.level, printOptions.dst, LogDisplayPanel.getValueHighlightIndexes(record.idx, 'level', printOptions.matches), {color: levelColor, dim: true}, {color: 'blue'});
-            printOptions.dst.insert(']', {color: levelColor, dim: true});
-        }
 
-        if(record.log.message !== undefined) {
-            LogDisplayPanel.printHighlightedText(record.log.message.toString(), printOptions.dst, LogDisplayPanel.getValueHighlightIndexes(record.idx, 'message', printOptions.matches), {color: messageColor}, {color: 'blue'});
-        }
+            const text = 'property' in substitution?
+                (value == null && !substitution.showNull? '': (substitution.prefix || '') + value + (substitution.suffix || '' )):
+                value;
+
+            return {
+                text,
+                attributes: LogDisplayPanel.evaluateConditionalAttributes({...globalAttributes, ...substitution.attributes}, substitution.conditionalAttributes, property, value, record)
+            };
+        });
 
         let linesPrinted = 1;
-        if(printOptions.expandedView) {
-            // copy top-level properties of the log and delete properties we don't want displayed in the expanded view
-            // TODO: make this a user configurable whitelist/blacklist
-            // const expandedLog = Object.assign({}, record.log);
-            // delete expandedLog.level;
-            // delete expandedLog.message;
-            // delete expandedLog.pid;
-            // delete expandedLog.timestamp;
 
+        textParts.forEach(({text, attributes}) => {
+            if(text === '') {
+                return;
+            }
+
+            // fix certain broken attr combinations
+            // grey and dim appears as background color
+            if(attributes.color === 'grey' && attributes.dim) {
+                attributes.color = 'white';
+            }
+
+            LogDisplayPanel.printHighlightedText(text, printOptions.dst, LogDisplayPanel.getValueHighlightIndexes(record.idx, 'timestamp', printOptions.matches), attributes, valueMatchAttr);
+
+        });
+
+        if(printOptions.expandedView) {
             printOptions.dst.newLine();
-            // linesPrinted += 1;
             linesPrinted += LogDisplayPanel.printJson(record, record.log, printOptions);
         }
 
@@ -878,7 +914,8 @@ export namespace LogDisplayPanel {
     export interface PrintOptions {
         dst: TextBuffer;
         matches?: ResultSet.MatchMap;
-        logLevelColors: {[level: string]: string};
+        // logLevelColors: {[level: string]: string};
+        format: LogFormat;
         expandedView: boolean;
         /** this text is copied once for each level of indent in the exapnded view */
         indentStr: string;

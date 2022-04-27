@@ -59,7 +59,8 @@ export class LogStream<T extends LogStream.Source<K> = LogStream.Source<any>, K 
                     const record = logStream.logdb.ingest(JSON.stringify({
                         level: 'error',
                         message: error.message,
-                        error: exposeError(error)
+                        error: exposeError(error),
+                        timestamp: error.timestamp || new Date().toISOString(),
                     }));
 
                     logStream.logsSubject.next(record);
@@ -70,13 +71,16 @@ export class LogStream<T extends LogStream.Source<K> = LogStream.Source<any>, K 
             source.running = false;
             // TODO: show these logs in a separate "sift messages" panel
             const record = logStream.logdb.ingest(JSON.stringify({
-                level: 'warn',
-                message: `Child source "${targetProcess.spawnfile}" (${targetProcess.pid}) exited with ${code != null? 'code "' + code + '"': 'signal "' + signal + '"'}`
+                level: 'sift',
+                message: `Child source "${targetProcess.spawnfile}" (${targetProcess.pid}) exited with ${code != null? 'code "' + code + '"': 'signal "' + signal + '"'}`,
+                timestamp: new Date().toISOString(),
             }));
             logStream.logsSubject.next(record);
 
             const record2 = logStream.logdb.ingest(JSON.stringify({
-                level: 'warn', message: `Press CTRL_C to close`
+                level: 'sift',
+                message: `Press CTRL_C to close`,
+                timestamp: new Date().toISOString(),
             }));
 
             logStream.logsSubject.next(record2);
@@ -97,10 +101,14 @@ export class LogStream<T extends LogStream.Source<K> = LogStream.Source<any>, K 
         const subscription = observable.pipe(
             finalize(() => {
                 logStream.logsSubject.next(logStream.logdb.ingest(JSON.stringify({
-                    level: 'warn', message: `END`
+                    level: 'sift',
+                    message: `END`,
+                    timestamp: new Date().toISOString(),
                 })));
                 logStream.logsSubject.next(logStream.logdb.ingest(JSON.stringify({
-                    level: 'warn', message: `Press CTRL_C to close`
+                    level: 'sift',
+                    message: `Press CTRL_C to close`,
+                    timestamp: new Date().toISOString(),
                 })));
             }),
         ).subscribe({
@@ -123,7 +131,8 @@ export class LogStream<T extends LogStream.Source<K> = LogStream.Source<any>, K 
                 const record = logStream.logdb.ingest(JSON.stringify({
                     level: 'error',
                     message: error.message,
-                    error: exposeError(error)
+                    error: exposeError(error),
+                    timestamp: error.timestamp || new Date().toISOString(),
                 }));
 
                 logStream.logsSubject.next(record);
