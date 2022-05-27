@@ -188,8 +188,10 @@ export class Display {
             panel.setSelected(false);
 
             this.logStreamPanelIndex = Math.max(0, Math.min(this.logStreamPanels.length - 1, panelIndex));
-            const newPanel = this.logStreamPanels[this.logStreamPanelIndex].panel;
-            newPanel.setSelected(true);
+            if(this.logStreamPanels.length > 0) {
+                const newPanel = this.logStreamPanels[this.logStreamPanelIndex].panel;
+                newPanel.setSelected(true);
+            }
         }
         else if(panelIndex < this.logStreamPanelIndex) {
             this.logStreamPanelIndex -= 1;

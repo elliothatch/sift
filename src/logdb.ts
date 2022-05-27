@@ -662,6 +662,15 @@ function parseLog(line: string): object {
         };
     }
 
+    // if the root log is parsable as json, but is not an object, wrap it in an object
+    // TODO: maybe we should deal with this in the display instead of messing with inputs
+    if(typeof log !== 'object' || log == null) {
+        return {
+            level: 'info',
+            message: log
+        };
+    }
+
     return log;
 }
 

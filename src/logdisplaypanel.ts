@@ -8,7 +8,7 @@ import {LogRecord, LogIdx, PropertyId, ResultSet, FilterMatch, getProperty } fro
 * @param value - value of the property. if a top-level condition, will be the log itself
 * @param record - full log record this substitution is being applied to
 * if returns true, the associated format will be applied to the log */
-export type FormatCondition = (property: string, value: any, record: LogRecord) => boolean;
+export type FormatCondition = (value: any, property: string, record: LogRecord) => boolean;
 
 /** a substitution in a format string */
 export interface LogSubstitution {
@@ -131,16 +131,16 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
             }],
             attributes: {color: 'grey'},
             conditionalAttributes: [{
-                condition: (_property, value) => value?.level === 'error',
+                condition: (value) => value?.level === 'error',
                 attributes: {color: 'red'}
             }, {
-                condition: (_property, value) => value?.level === 'warn',
+                condition: (value) => value?.level === 'warn',
                 attributes: {color: 'yellow'}
             }, {
-                condition: (_property, value) => value?.level === 'info',
+                condition: (value) => value?.level === 'info',
                 attributes: {color: 'white'}
             }, {
-                condition: (_property, value) => value?.level === 'sift',
+                condition: (value) => value?.level === 'sift',
                 attributes: {color: 'cyan'}
             }]
         };
@@ -698,7 +698,7 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
             return {...baseAttributes};
         }
         return conditionalAttributes.reduce((attr, {condition, attributes}) => {
-            if(condition(property, value, record)) {
+            if(condition(value, property, record)) {
                 return Object.assign(attr, attributes);
             }
             return attr;

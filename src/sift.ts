@@ -227,7 +227,17 @@ export class Sift {
                             }
                             else {
                                 this.display.hideLogStreamPanel(this.currentLogStreamPanel);
+                                // TODO: CRASHES if there is a process running in a closed panel and we closed the last visible panel.
                                 this.currentLogStreamPanel = this.display.logStreamPanels[this.display.logStreamPanelIndex].panel;
+                                // THE SOLUTION BELOW IS NOT GREAT. DOESN'T ACTUALLY WORK SINCE WE LEAVE THE LOG STREAMS IN THE LIST WHEN PANEL IS CLOSED
+                                // WHAT IF YOU WANT TO VIEW A PROCESS THAT STOPPED. MAYBE WE SHOULD SHOW A PROCESS LIST AS THE FINAL SCREEN BEFORE SHUTDOWN?
+                                // if(this.display.logStreamPanels.length > 0) {
+                                    // this.currentLogStreamPanel = this.display.logStreamPanels[this.display.logStreamPanelIndex].panel;
+                                // }
+                                // else {
+                                    // // there are no more visible panels, show the panel for the last hidden log stream
+                                    // this.display.showLogStreamPanel(this.logStreams[this.logStreams.length - 1].panel);
+                                // }
                                 this.display.draw();
                             }
                         }
@@ -530,6 +540,11 @@ export class Sift {
                 fn: (key, matches, data) => {
 
                     const helpText: string[] = [
+                        'sift v1.1.0',
+                        '',
+                        'Elliot Hatch 2022',
+                        'sift is open source. https://github.com/elliothatch/sift',
+                        '',
                         'Welcome to sift, the interactive log filter.',
                         '',
                         'Key bindings:',
@@ -539,7 +554,42 @@ export class Sift {
                                 text.push(`   ${key + ' '.repeat(12 - key.length)} ${action.description}`);
                             });
                             return text;
-                        }, [] as string[])
+                        }, [] as string[]),
+                        '',
+                        'Query Language:',
+                        'Sift uses a simple query language to find and filter JSON objects.',
+                        '',
+                        'To search all keys and values, just start typing your search.',
+                        '   > error',
+                        '(matches objects with "error" as a key or value)',
+                        '',
+                        'You can find logs matching a specific key-value pair by separating the key and value with a colon (:).',
+                        '"key:value"',
+                        '   > level:error',
+                        '(matches all objects with the key "level" whose value matches the string "error")',
+                        '',
+                        'You can also type the colon but leave off the key or value to do a partial search.',
+                        '"key:" or ":value"',
+                        '   > level:',
+                        '(matches all objects with the key "level")',
+                        '   > :error',
+                        '(matches all objects with the value "error" on any property)',
+                        '',
+                        'All queries are matched using a case-insensitive fuzzy string matching algorithm.',
+                        'The algorithm is provided by the farzher/fuzzysort library (https://github.com/farzher/fuzzysort/).',
+                        'Non-string datatypes are interpreted as strings during the filtering process.',
+                        '',
+                        'Operators:',
+                        'More complex queries can be created with unary and binary operators.',
+                        '',
+                        '   " " (space): Logical AND. Example: "error critical"',
+                        '   "," (comma): Logical OR. Example: "error,warn"',
+                        '   The AND operator (space) takes precedence over the OR operator (comma), meaning queries are always written in disjunctive normal form. Example: "error critical,status failed" means "(error && critical) || (status && failed)".',
+                        '   "!" (exclamation point): Exclude',
+                        '      "!key:value": matches objects with "value", excluding values associated with "key". Example: "!timestamp:2020" returns logs with a value matching "2020" only if the property for that value does not match "timestamp".',
+                        '      "key:!value": matches objects with "key" property, if the value of "key" doesn\'t match "value". Example: "error:!connection" returns logs with a property matching "error" only if the value associated with that property does not match "connection".',
+                        '',
+                        'You can also surround part of a query with quotation marks (") to search for a literal string, in case you want to search for a string containing sift operators. This is currently buggy and doesn\'t work if your query contains more than one quoted string.',
                     ];
                     const logStream = LogStream.fromObservable('sift help',
                         from(helpText)
