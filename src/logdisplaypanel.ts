@@ -721,13 +721,15 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
 
             return {
                 text,
-                attributes: LogDisplayPanel.evaluateConditionalAttributes({...globalAttributes, ...substitution.attributes}, substitution.conditionalAttributes, property, value, record)
+                attributes: LogDisplayPanel.evaluateConditionalAttributes({...globalAttributes, ...substitution.attributes}, substitution.conditionalAttributes, property, value, record),
+                property,
+                substitution,
             };
         });
 
         let linesPrinted = 1;
 
-        textParts.forEach(({text, attributes}) => {
+        textParts.forEach(({text, attributes, property, substitution}) => {
             if(text === '') {
                 return;
             }
@@ -738,7 +740,10 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
                 attributes.color = 'white';
             }
 
-            LogDisplayPanel.printHighlightedText(text, printOptions.dst, LogDisplayPanel.getValueHighlightIndexes(record.idx, 'timestamp', printOptions.matches), attributes, valueMatchAttr);
+            // offset the indexes based on the length of the prefix
+            const highlightIndexes = LogDisplayPanel.getValueHighlightIndexes(record.idx, property, printOptions.matches).map((index) => index + ((substitution as any).prefix || '').length);
+
+            LogDisplayPanel.printHighlightedText(text, printOptions.dst, highlightIndexes, attributes, valueMatchAttr);
 
         });
 

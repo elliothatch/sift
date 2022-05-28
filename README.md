@@ -41,7 +41,7 @@ Logs ingested from STDERR are always assigned the level `error`, and may overrid
 As each log is ingested, it is assigned a unique "Log Index", which is visible in the left column of the log display.
 
 ## keyboard commands
-To view in-app help, type `\\?` (backslash, followed by a question mark).
+To view in-app help, type `\?` (backslash, followed by a question mark).
 
 Sift uses a modular menu system. The default view on start-up is QUERY MODE.
 
@@ -64,7 +64,7 @@ Sift also recognizes the following keyboard commands:
 Changing the selection with `UP/DOWN/PAGE_UP/PAGE_DOWN/HOME` pauses log auto scrolling. Resume auto scrolling by pressing `END` to jump to the end of the logs.
 
 ### command mode
-Press backslash `\\` to enter COMMAND MODE and open a menu with additional actions. Press the listed key to perform an action, or press `ESCAPE` or `CTRL_C` to return to QUERY MODE.  
+Press backslash `\` to enter COMMAND MODE and open a menu with additional actions. Press the listed key to perform an action, or press `ESCAPE` or `CTRL_C` to return to QUERY MODE.  
 Sift currently supports the following commands:
 
  - `\`: insert \
