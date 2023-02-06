@@ -105,6 +105,18 @@ You can also type the colon but leave off the key or value to do a partial searc
 ```
 (matches all objects with the value "error" on any property)
 
+To search specific keys within an object, use dot notation.
+```bash
+> node.data
+```
+(matches all objects with the "node" key whose value is an object with the property "data")
+
+Dot notation works to any depth, and can be combined with a colon to match a specific value.
+
+```bash
+> node.data.id:42
+```
+
 All queries are matched using a case-insensitive fuzzy string matching algorithm. You can make the search more inclusive with `PAGE UP` or more strict with `PAGE DOWN`.
 
 The algorithm is provided by the [farzher/fuzzysort](https://github.com/farzher/fuzzysort/) library. It seems to be biased toward searching filename-like strings, and tends to give much higher scores to matches at the beginning of words, capital letters, after periods, etc. If a query isn't returning the results you want, try relaxing the search threshold (removed for v1.1.0).
@@ -139,6 +151,7 @@ Sift is in very early development, and could be improved by the addition of seve
  - Query history: History of queries and commands used to spawn processes.
 
 # changelog
+ - 1.1.1: Fix conditional formatting not using query highlighting. Fix typos in README.
  - 1.1.0: Complete overhaul of UI, introducing scrollable selection, command mode, multiple panels, and more. Fixed several bugs, including array items not being indexed, and some logs being printed in the same color as the background.
  - 1.0.11: Fix boolean values not being displayed. When query is changed, enable autoscroll and scroll to last log.
  - 1.0.10: Change keybindings for scrolling, add jump to beginning/end. Non-info level logs messages display as grey instead of white.
