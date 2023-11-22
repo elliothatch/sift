@@ -21,7 +21,7 @@ function testQuery(query: string, logdb: LogDb, expected: number[]) {
         expect(expr.length).toBe(1);
         
 
-        return logdb.filterAll(expr[0]).pipe(
+        return logdb.filterAll(expr[0], -500).pipe(
             toArray(),
             tap((results) => {
                 const resultIdxs = results.map((result) => result.record.idx).sort((a, b) => a - b);

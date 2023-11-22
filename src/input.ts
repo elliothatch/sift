@@ -34,6 +34,7 @@ export namespace Input {
         Query,
         Command,
         Filter,
+        Format,
         Text,
     }
 

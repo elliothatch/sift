@@ -63,13 +63,26 @@ export class Sift {
                 bindings: this.bindings[Input.Mode.Filter],
                 fallback: this.handleFilterInput,
             },
+            [Input.Mode.Format]: {
+                bindings: this.bindings[Input.Mode.Format]
+            },
             [Input.Mode.Text]: {
                 bindings: this.bindings[Input.Mode.Text],
                 fallback: this.handleTextInput,
             }
         });
 
-        this.siftLogsSubject.next('Sift started successfully');
+        this.siftLogsSubject.next('sift v1.1.2');
+        this.siftLogsSubject.next(''),
+        this.siftLogsSubject.next('Elliot Hatch 2023'),
+        this.siftLogsSubject.next('sift is open source. https://github.com/elliothatch/sift'),
+        this.siftLogsSubject.next(''),
+        this.siftLogsSubject.next('Welcome to sift, the interactive log filter.'),
+        this.siftLogsSubject.next('Type \\s to spawn a process.'),
+        this.siftLogsSubject.next('Type \\? to display help.'),
+        this.siftLogsSubject.next(''),
+        this.siftLogsSubject.next('Command line usage:'),
+        this.siftLogsSubject.next('sift <exec> [...params]'),
 
         this.display.draw();
 
@@ -88,19 +101,45 @@ export class Sift {
             query: 'level:error'
         });
         this.display.filterPanel.setRule('w', {
-                enabled: false,
-                name: 'Warning',
-                query: 'level:warn'
+            enabled: false,
+            name: 'Warning',
+            query: 'level:warn'
         });
         this.display.filterPanel.setRule('i', {
-                enabled: false,
-                name: 'Info',
-                query: 'level:info'
+            enabled: false,
+            name: 'Info',
+            query: 'level:info'
         });
         this.display.filterPanel.setRule('t', {
-                enabled: false,
-                name: 'Trace',
-                query: 'level:trace'
+            enabled: false,
+            name: 'Trace',
+            query: 'level:trace'
+        });
+
+        this.display.formatPanel.insertRule({
+            enabled: false,
+            format: {
+                property: 'timestamp',
+                attributes: {dim: true},
+                prefix: '[',
+                suffix: ']',
+            }
+        });
+        this.display.formatPanel.insertRule({
+            enabled: true,
+            format: {
+                property: 'level',
+                attributes: {dim: true},
+                prefix: '[',
+                suffix: ']',
+            }
+        });
+
+        this.display.formatPanel.insertRule({
+            enabled: true,
+            format: {
+                property: 'message',
+            }
         });
 
     }
@@ -118,6 +157,8 @@ export class Sift {
             },
         }, stream);
 
+        panel.logDisplayPanel.logFormat.format = this.display.formatPanel.rules.filter((rule) => rule.enabled).map((rule) => rule.format);
+
         this.display.showLogStreamPanel(panel);
         panel.options.drawCursor = true;
 
@@ -126,6 +167,11 @@ export class Sift {
         // select the new log stream, which will be at the end
         this.display.selectLogStreamPanel(this.display.logStreamPanels.length - 1);
         this.currentLogStreamPanel = panel;
+
+        if(this.display.logStreamPanels.length === 2 && this.display.logStreamPanels[0].panel === this.siftLogStreamPanel) {
+            // hide the startup screen/debug panel when spawning the first process
+            this.display.hideLogStreamPanel(this.siftLogStreamPanel);
+        }
     }
 
     public terminateProcess(logStream: LogStream<LogStream.Source.Process>) {
@@ -437,10 +483,24 @@ export class Sift {
                     this.currentLogStreamPanel.setQuery((this.currentLogStreamPanel.queryPromptInputPanel.buffer as any).getText());
                 }
             },
+            'fuzzyThresholdBroaden': {
+                description: 'Increase fuzzy matching threshold, broadening results.',
+                fn: () => {
+                    this.currentLogStreamPanel.increaseFuzzyThreshold();
+                    this.display.draw();
+                }
+            },
+            'fuzzyThresholdNarrow': {
+                description: 'Decrease fuzzy matching threshold, narrowing results.',
+                fn: () => {
+                    this.currentLogStreamPanel.decreaseFuzzyThreshold();
+                    this.display.draw();
+                }
+            },
         }),
         [Input.Mode.Command]: asActions({
             'enterCommandMode': {
-                description: 'Display the command pane',
+                description: 'Display the command panel',
                 fn: () => {
                     this.input.mode = Input.Mode.Command;
                     this.display.showCommandPanel();
@@ -510,7 +570,7 @@ export class Sift {
                 }
             },
             'splitWindowVertical': {
-                description: 'split the current log panel into two windows',
+                description: 'vertically split the current log panel',
                 fn: (key, matches, data) => {
                     const stream = this.currentLogStreamPanel.logStream;
                     const panel = new LogStreamPanel(this.display.logPanel.buffer, {
@@ -539,25 +599,24 @@ export class Sift {
                 description: 'display help',
                 fn: (key, matches, data) => {
 
-                    const helpText: string[] = [
-                        'sift v1.1.0',
-                        '',
-                        'Elliot Hatch 2022',
-                        'sift is open source. https://github.com/elliothatch/sift',
+                    const helpText: Array<string | {level: string, message: string}> = [
+                        {level: 'sift', message: 'sift v1.1.2'},
+                        {level: 'sift', message: ''},
+                        {level: 'sift', message: 'Elliot Hatch 2023'},
+                        {level: 'sift', message: 'sift is open source. https://github.com/elliothatch/sift'},
                         '',
                         'Welcome to sift, the interactive log filter.',
+                        'Spawn a process to inspect by typing \\s',
+                        'You can also spawn a process directly from the command line:',
+                        '   sift <exec> [...params]',
                         '',
-                        'Key bindings:',
-                        ...Object.entries(this.bindings).reduce((text, [mode, bindings]) => {
-                            text.push(`${Input.Mode[parseInt(mode) as Input.Mode]}:`)
-                            Object.entries(bindings).forEach(([key, action]) => {
-                                text.push(`   ${key + ' '.repeat(12 - key.length)} ${action.description}`);
-                            });
-                            return text;
-                        }, [] as string[]),
+                        'Scroll through logs using the ARROW KEYS.',
+                        'To expand the full contents of a log, select it with the ARROW KEYS and press ENTER.',
+                        'Selecting a log pauses log stream auto-scrolling. Press END to jump to the most recent log and resume auto-scrolling.',
+                        'You can view all key bindings at the bottom of this help page.',
                         '',
-                        'Query Language:',
-                        'Sift uses a simple query language to find and filter JSON objects.',
+                        {level: 'sift', message: 'Query Language'},
+                        'Sift uses a simple query language to find and filter JSON formatted logs.',
                         '',
                         'To search all keys and values, just start typing your search.',
                         '   > error',
@@ -582,11 +641,7 @@ export class Sift {
                         'Dot notation works to any depth, and can be combined with a colon to match a specific value.',
                         '   > node.data.id:42',
                         '',
-                        'All queries are matched using a case-insensitive fuzzy string matching algorithm.',
-                        'The algorithm is provided by the farzher/fuzzysort library (https://github.com/farzher/fuzzysort/).',
-                        'Non-string datatypes are interpreted as strings during the filtering process.',
-                        '',
-                        'Operators:',
+                        {level: 'sift', message: 'Operators'},
                         'More complex queries can be created with unary and binary operators.',
                         '',
                         '   " " (space): Logical AND. Example: "error critical"',
@@ -597,6 +652,69 @@ export class Sift {
                         '      "key:!value": matches objects with "key" property, if the value of "key" doesn\'t match "value". Example: "error:!connection" returns logs with a property matching "error" only if the value associated with that property does not match "connection".',
                         '',
                         'You can also surround part of a query with quotation marks (") to search for a literal string, in case you want to search for a string containing sift operators. This is currently buggy and doesn\'t work if your query contains more than one quoted string.',
+                        '',
+                        {level: 'sift', message: 'Fuzzy Matching'},
+                        'All queries are matched using a case-insensitive fuzzy string matching algorithm.',
+                        'The algorithm is provided by the farzher/fuzzysort library (https://github.com/farzher/fuzzysort/).',
+                        'Non-string datatypes are interpreted as strings during the filtering process.',
+                        '',
+                        'When you enter a query, each matching property and value across all logs is assigned a score based on how closely it matches the query.',
+                        'Logs are only displayed if their score exceeds the fuzzy matching threshold.',
+                        '',
+                        'There are times when the default threshold may be too strict or too permissive for your query.',
+                        'You can decrease the threshold to narrow your search by pressing SHIFT_PAGE_DOWN, or broaden your search with SHIFT_PAGE_UP.',
+                        '',
+                        'The selected threshold is indicated by the bar left of the matches counter. When the bar is full, your query will match the maximum number of logs.',
+                        'The bar changes color to indicate that the threshold has been changed from the default value.',
+                        '',
+                        {level: 'sift', message: 'Command Mode'},
+                        'Many features of sift are accessed through Command Mode.',
+                        'Open the command panel by pressing \\, then press the key associated with an option to select it.',
+                        'If you wish to enter a backslash into your query, type \\ as your selection.',
+                        'You can return to Query Mode at any time by pressing ESCAPE or CTRL_C',
+                        '',
+                        {level: 'sift', message: 'Filter Mode'},
+                        'In Filter Mode you can create and toggle persistent filters that are applied as additional AND rules to your query.',
+                        'To enable or disable a filter, press the key associated with the filter.',
+                        'To create a filter or edit an existing filter, hold SHIFT and press the key for the filter you wish to edit, then enter a name and query.',
+                        'Saved filters are not persisted between sessions.',
+                        '',
+                        {level: 'sift', message: 'Formatting Mode'},
+                        'Formatting mode lets you control the data that is displayed on unexpanded logs.',
+                        'Use the ARROW KEYS to select a formatting rule and press ENTER to enable or disable it.',
+                        'Timestamps are hidden by default.',
+                        'Formatting options are not persisted between sessions and cannot be edited at this time.',
+                        '',
+                        {level: 'sift', message: 'Log Streams'},
+                        'When you spawn a process in sift, its STDOUT and STDERR file descriptors are captured, line-by-line into an in-memory log stream.',
+                        'Currently, Sift only supports line-separated JSON as input. Inputs that fail to parse as JSON are converted into a JSON object with the structure:',
+                        '{',
+                        '   "level": "info",',
+                        '   "message": "[INPUT]"',
+                        '}',
+                        '',
+                        'Logs ingested from STDERR are always assigned the level "error", and may override the original value of "level".',
+                        '',
+                        'As each log is ingested, it is assigned a unique "Log Index", which is visible in the left column of the log display.',
+                        'You can jump to a specific log index by typing \\g and entering a log number.',
+                        '',
+                        {level: 'sift', message: 'Windows'},
+                        'Each log stream can be displayed in one or more split windows.',
+                        'Spawning a process always opens a new window. You can kill a running process by pressing CTRL_C.',
+                        'Pressing CTRL_C on a process that has already terminated closes the window.',
+                        '',
+                        'Split a log stream into an additional window with the \\v command.',
+                        'Each window has its own query, filters, and formatting rules.',
+                        'Type \\c to close a split window without terminating the process.',
+                        '',
+                        {level: 'sift', message: 'Key Bindings'},
+                        ...Object.entries(this.bindings).reduce((text, [mode, bindings]) => {
+                            text.push(`${Input.Mode[parseInt(mode) as Input.Mode]}:`)
+                            Object.entries(bindings).forEach(([key, action]) => {
+                                text.push(`   ${key + ' '.repeat(16 - key.length)} ${action.description}`);
+                            });
+                            return text;
+                        }, [] as string[]),
                     ];
                     const logStream = LogStream.fromObservable('sift help',
                         from(helpText)
@@ -615,6 +733,12 @@ export class Sift {
                     this.display.selectLogStreamPanel(this.display.logStreamPanels.length - 1);
                     this.currentLogStreamPanel = panel;
                     this.actions[Input.Mode.Command].exitCommandMode.fn(key, matches, data);
+
+                    if(this.display.logStreamPanels.length === 2 && this.display.logStreamPanels[0].panel === this.siftLogStreamPanel) {
+                        // hide the startup screen/debug panel when displaying help
+                        this.display.hideLogStreamPanel(this.siftLogStreamPanel);
+                    }
+
                     this.display.draw();
                 }
             }
@@ -641,7 +765,7 @@ export class Sift {
                 }
             },
             'selectPanelLeft': {
-                description: 'Move panel selection left',
+                description: 'Move window selection left',
                 fn: (key, matches, data) => {
                     this.actions[Input.Mode.Query].selectPanelLeft.fn(key, matches, data);
                     this.updateFilterPanel(this.currentLogStreamPanel);
@@ -649,11 +773,61 @@ export class Sift {
                 }
             },
             'selectPanelRight': {
-                description: 'Move panel selection right',
+                description: 'Move window selection right',
                 fn: (key, matches, data) => {
                     this.actions[Input.Mode.Query].selectPanelRight.fn(key, matches, data);
                     this.updateFilterPanel(this.currentLogStreamPanel);
                     this.display.draw();
+                }
+            }
+        }),
+        [Input.Mode.Format]: asActions({
+            'enterFormatMode': {
+                description: 'Enter message formatting mode',
+                fn: () => {
+                    this.input.mode = Input.Mode.Format;
+                    this.display.hideCommandPanel();
+                    this.display.hideQueryKeyPanel();
+                    this.display.showFormatPanel();
+                    this.display.draw();
+                }
+            },
+            'exitFormatMode': {
+                description: 'Exit Format mode and return to Query mode',
+                fn: () => {
+                    this.input.mode = Input.Mode.Query;
+                    this.display.hideFormatPanel();
+                    this.display.showQueryKeyPanel();
+                    this.display.draw();
+                }
+            },
+            'moveFormatSelectionUp': {
+                description: 'Move format mode cursor up',
+                fn: () => {
+                    this.display.formatPanel.moveSelectionUp()
+                    this.display.draw()
+                }
+            },
+            'moveFormatSelectionDown': {
+                description: 'Move format mode cursor down',
+                fn: () => {
+                    this.display.formatPanel.moveSelectionDown()
+                    this.display.draw()
+                }
+            },
+            'toggleFormatEnabled': {
+                description: 'Toggle format rule on/off',
+                fn: () => {
+                    this.display.formatPanel.toggleSelectionEnabled()
+
+                    const format = this.display.formatPanel.rules.filter((rule) => rule.enabled).map((rule) => rule.format);
+                    this.display.logStreamPanels.forEach((logStreamPanel) => {
+                        logStreamPanel.panel.logDisplayPanel.logFormat.format = format;
+                        logStreamPanel.panel.logDisplayPanel.logEntryCache.clear();
+                        logStreamPanel.panel.logDisplayPanel.markDirty();
+                    });
+
+                    this.display.draw()
                 }
             }
         }),
@@ -751,6 +925,8 @@ export class Sift {
             'SHIFT_RIGHT': this.actions[Input.Mode.Query].queryCursorRight,
             // 'SHIFT_UP': this.actions[Input.Mode.Query].queryHistoryBack,
             // 'SHIFT_DOWN': this.actions[Input.Mode.Query].queryHistoryForward,
+            'SHIFT_PAGE_UP': this.actions[Input.Mode.Query].fuzzyThresholdBroaden,
+            'SHIFT_PAGE_DOWN': this.actions[Input.Mode.Query].fuzzyThresholdNarrow,
             'CTRL_E': this.actions[Input.Mode.Query].scrollDown,
             'CTRL_Y': this.actions[Input.Mode.Query].scrollUp,
             'BACKSPACE': this.actions[Input.Mode.Query].backspace,
@@ -794,6 +970,15 @@ export class Sift {
             'HOME': this.actions[Input.Mode.Query].scrollStart,
             'END': this.actions[Input.Mode.Query].scrollEnd,
         },
+        [Input.Mode.Format]: {
+            'CTRL_C': this.actions[Input.Mode.Format].exitFormatMode,
+            'ESCAPE': this.actions[Input.Mode.Format].exitFormatMode,
+            'BACKSPACE': this.actions[Input.Mode.Format].exitFormatMode,
+            'UP': this.actions[Input.Mode.Format].moveFormatSelectionUp,
+            'DOWN': this.actions[Input.Mode.Format].moveFormatSelectionDown,
+            'ENTER': this.actions[Input.Mode.Format].toggleFormatEnabled,
+            'KP_ENTER': this.actions[Input.Mode.Format].toggleFormatEnabled,
+        },
         [Input.Mode.Text]: {
             'CTRL_C': this.actions[Input.Mode.Text].cancelText,
             'ESCAPE': this.actions[Input.Mode.Text].cancelText,
@@ -813,6 +998,9 @@ export class Sift {
         }, {
             key: 'f',
             action: this.actions[Input.Mode.Filter].enterFilterMode,
+        }, {
+            key: 'm',
+            action: this.actions[Input.Mode.Format].enterFormatMode,
         }, {
             key: 'c',
             action: this.actions[Input.Mode.Command].closeWindow,

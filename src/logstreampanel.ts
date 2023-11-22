@@ -11,10 +11,35 @@ import { LogDisplayPanel } from './logdisplaypanel';
 import { FilterPanel } from './filterpanel';
 
 export class LogStreamPanel<T extends LogStream = LogStream> extends Panel<ScreenBuffer> {
+    /** The fuzzysort threshold can be adjusted by the user to these predefined step sizes. The steps are somewhat arbitrary, as are fuzzysort's match scores. */
+    public static fuzzysortThresholdSteps = [
+        0,        // exact match
+        -10,
+        -100,
+        -500,
+        -1000,
+        -5000,
+        -10000,
+        -Infinity // any match
+    ];
+    public static fuzzysortThresholdFrames = [
+        '▁',
+        '▂',
+        '▃',
+        '▄',
+        '▅',
+        '▆',
+        '▇',
+        '█'
+    ];
+    public static fuzzysortThresholdDefaultIndex = 3;
+
     public logStream: T;
     public query: string = '';
     public filter?: Parse.Expression;
     public filterRules: {[key: string]: FilterPanel.Rule} = {};
+    public fuzzysortThresholdIndex = LogStreamPanel.fuzzysortThresholdDefaultIndex;
+
     public autoscroll: boolean = true;
 
     protected blockDrawLog: boolean = false;
@@ -27,7 +52,9 @@ export class LogStreamPanel<T extends LogStream = LogStream> extends Panel<Scree
     protected filterSubscription?: Subscription;
 
     public logDisplayPanel: LogDisplayPanel
-    public queryResultsPanel: TextPanel;
+    public queryResultsPanel: ScreenPanel;
+    public queryResultsMatchesPanel: TextPanel;
+    public queryResultsThresholdPanel: ScreenPanel;
     protected queryPromptPanel: ScreenPanel;
     protected queryPromptArrowPanel: ScreenPanel;
     public queryPromptInputPanel: TextPanel;
@@ -59,14 +86,33 @@ export class LogStreamPanel<T extends LogStream = LogStream> extends Panel<Scree
             }
         });
 
-        this.queryResultsPanel = new TextPanel(this.buffer, {
+        this.queryResultsPanel = new ScreenPanel(this.buffer, {
             name: `${this.options.name? this.options.name: ''}.queryResultsPanel`,
             width: 1,
             height: 1,
             flex: {
                 width: true,
             },
-        }, this.renderQueryResults);
+            flexCol: true,
+        });
+
+        this.queryResultsThresholdPanel = new ScreenPanel(this.buffer, {
+            name: `${this.options.name? this.options.name: ''}.queryResultsThresholdPanel`,
+            width: 2,
+            height: 1,
+        }, this.renderQueryResultsThreshold);
+
+        this.queryResultsMatchesPanel = new TextPanel(this.buffer, {
+            name: `${this.options.name? this.options.name: ''}.queryResultsMatchesPanel`,
+            width: 1,
+            height: 1,
+            flex: {
+                width: true,
+            },
+        }, this.renderQueryResultsMatches);
+
+        this.queryResultsPanel.addChild(this.queryResultsThresholdPanel);
+        this.queryResultsPanel.addChild(this.queryResultsMatchesPanel);
 
         this.queryPromptPanel = new ScreenPanel(this.buffer, {
             name: `${this.options.name? this.options.name: ''}.queryPromptPanel`,
@@ -148,12 +194,12 @@ export class LogStreamPanel<T extends LogStream = LogStream> extends Panel<Scree
         this.logStream.logsObservable.subscribe((record) => {
             if(this.logDisplayPanel.logs === this.logStream.logdb.logs || !this.filter) {
                 this.logDisplayPanel.markDirty();
-                this.queryResultsPanel.markDirty();
+                this.queryResultsMatchesPanel.markDirty();
                 this.redrawEventsSubject.next(null);
                 return;
             }
 
-            const matches = this.logStream.logdb.matchLog(this.filter, record);
+            const matches = this.logStream.logdb.matchLog(this.filter, record, LogStreamPanel.fuzzysortThresholdSteps[this.fuzzysortThresholdIndex]);
 
             if(matches.length > 0) {
                 this.logDisplayPanel.logs.push(record);
@@ -174,12 +220,12 @@ export class LogStreamPanel<T extends LogStream = LogStream> extends Panel<Scree
                 });
 
                 this.logDisplayPanel.markDirty();
-                this.queryResultsPanel.markDirty();
+                this.queryResultsMatchesPanel.markDirty();
                 this.redrawEventsSubject.next(null);
             }
             else {
                 // just update the max match count
-                this.queryResultsPanel.markDirty();
+                this.queryResultsMatchesPanel.markDirty();
                 this.redrawEventsSubject.next(null);
             }
         });
@@ -211,31 +257,42 @@ export class LogStreamPanel<T extends LogStream = LogStream> extends Panel<Scree
         }
     }
 
-    public renderQueryResults: () => void = () => {
-        (this.queryResultsPanel.buffer as any).setText('');
+    public renderQueryResultsMatches: () => void = () => {
+        (this.queryResultsMatchesPanel.buffer as any).setText('');
         if(this.spinnerIndex >= 0) {
-            (this.queryResultsPanel.buffer as any).moveTo(0, 0);
-            this.queryResultsPanel.buffer.insert(this.spinnerFrames[this.spinnerIndex]);
+            (this.queryResultsMatchesPanel.buffer as any).moveTo(0, 0);
+            this.queryResultsMatchesPanel.buffer.insert(this.spinnerFrames[this.spinnerIndex]);
             this.spinnerIndex = (this.spinnerIndex + 1) % this.spinnerFrames.length;
         }
 
-        (this.queryResultsPanel.buffer as any).moveTo(2, 0);
-        this.queryResultsPanel.buffer.insert(`${this.logDisplayPanel.logs.length}/${this.logStream.logdb.logs.length}`);
-        this.queryResultsPanel.buffer.insert(` `);
+        (this.queryResultsMatchesPanel.buffer as any).moveTo(2, 0);
+        this.queryResultsMatchesPanel.buffer.insert(`${this.logDisplayPanel.logs.length}/${this.logStream.logdb.logs.length}`);
+        this.queryResultsMatchesPanel.buffer.insert(` `);
 
         const filterCount = Object.values(this.filterRules).filter((rule) => rule.enabled).length;
         if(filterCount > 0) {
-            this.queryResultsPanel.buffer.insert(`(${filterCount} filters)`);
-            this.queryResultsPanel.buffer.insert(` `);
+            this.queryResultsMatchesPanel.buffer.insert(`(${filterCount} filters)`);
+            this.queryResultsMatchesPanel.buffer.insert(` `);
         }
 
         if(this.logDisplayPanel.scrollLogIndex > 0) {
-            this.queryResultsPanel.buffer.insert(`[${this.logDisplayPanel.scrollLogIndex} above]`, {dim:true});
+            this.queryResultsMatchesPanel.buffer.insert(`[${this.logDisplayPanel.scrollLogIndex} above]`, {dim:true});
         }
         const bottomPosition = this.logDisplayPanel.getBottomPosition();
         if(bottomPosition && bottomPosition.entryIndex < this.logDisplayPanel.logs.length - 1) {
-            this.queryResultsPanel.buffer.insert(`[${this.logDisplayPanel.logs.length - 1 - bottomPosition.entryIndex} below]`, {dim:true});
+            this.queryResultsMatchesPanel.buffer.insert(`[${this.logDisplayPanel.logs.length - 1 - bottomPosition.entryIndex} below]`, {dim:true});
         }
+    }
+
+    public renderQueryResultsThreshold: () => void = () => {
+        if(this.fuzzysortThresholdIndex === LogStreamPanel.fuzzysortThresholdDefaultIndex) {
+            (this.queryResultsThresholdPanel.buffer as any).put({x: 0, y: 0}, LogStreamPanel.fuzzysortThresholdFrames[this.fuzzysortThresholdIndex]);
+        }
+        else {
+            // mark in yellow to indicate deviation from default
+            (this.queryResultsThresholdPanel.buffer as any).put({x: 0, y: 0, attr: {color: 'yellow'}}, LogStreamPanel.fuzzysortThresholdFrames[this.fuzzysortThresholdIndex]);
+        }
+        (this.queryResultsThresholdPanel.buffer as any).put({x: 1, y: 0}, ' ');
     }
 
     public setQuery(query: string): Subscription | undefined {
@@ -330,14 +387,14 @@ export class LogStreamPanel<T extends LogStream = LogStream> extends Panel<Scree
             }
 
             this.logDisplayPanel.markDirty();
-            this.queryResultsPanel.markDirty();
+            this.queryResultsMatchesPanel.markDirty();
             this.redrawEventsSubject.next(null);
             return this.filterSubscription;
         }
 
         this.spinnerIndex = 0;
         this.blockDrawLog = true;
-        this.queryResultsPanel.markDirty();
+        this.queryResultsMatchesPanel.markDirty();
         this.redrawEventsSubject.next(null);
         // this.printQueryResults();
 
@@ -348,7 +405,7 @@ export class LogStreamPanel<T extends LogStream = LogStream> extends Panel<Scree
 
 
         this.filterSubscription = merge(
-            this.logStream.logdb.filterAll(filter),
+            this.logStream.logdb.filterAll(filter, LogStreamPanel.fuzzysortThresholdSteps[this.fuzzysortThresholdIndex]),
             // below prevents annoying visual flicker when starting search
             interval(1000/60).pipe(
                 take(1),
@@ -412,18 +469,37 @@ export class LogStreamPanel<T extends LogStream = LogStream> extends Panel<Scree
         ).subscribe({
             next: () => {
                 this.logDisplayPanel.markDirty();
-                this.queryResultsPanel.markDirty();
+                this.queryResultsMatchesPanel.markDirty();
                 this.redrawEventsSubject.next(null);
             },
             complete: () => {
                 this.spinnerIndex = -1;
                 this.logDisplayPanel.markDirty();
-                this.queryResultsPanel.markDirty();
+                this.queryResultsMatchesPanel.markDirty();
                 this.redrawEventsSubject.next(null);
             }
         });
 
         return this.filterSubscription;
+    }
+
+    public increaseFuzzyThreshold(): Subscription | undefined {
+        if(this.fuzzysortThresholdIndex >= LogStreamPanel.fuzzysortThresholdSteps.length - 1) {
+            return undefined;
+        }
+
+        this.fuzzysortThresholdIndex++;
+        this.queryResultsThresholdPanel.markDirty();
+        return this.setFilter(this.filter);
+    }
+
+    public decreaseFuzzyThreshold(): Subscription | undefined {
+        if(this.fuzzysortThresholdIndex <= 0) {
+            return undefined;
+        }
+        this.fuzzysortThresholdIndex--;
+        this.queryResultsThresholdPanel.markDirty();
+        return this.setFilter(this.filter);
     }
 }
 

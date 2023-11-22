@@ -5,6 +5,7 @@ import { Subscription } from 'rxjs';
 import { ScreenPanel, TextPanel } from './panel';
 import { CommandPanel } from './commandpanel';
 import { FilterPanel } from './filterpanel';
+import { FormatPanel } from './formatpanel';
 import { LogStreamPanel } from './logstreampanel';
 
 /** manages the display
@@ -20,6 +21,7 @@ export class Display {
     public queryKeyPanel: TextPanel;
     public commandPanel: CommandPanel;
     public filterPanel: FilterPanel;
+    public formatPanel: FormatPanel;
 
     public logStreamPanels: {panel: LogStreamPanel, redrawSubscription: Subscription}[];
     public logStreamPanelIndex: number = 0;
@@ -66,12 +68,12 @@ export class Display {
                 ['CTRL_C', 'EXIT'],
                 ['\\', 'COMMANDS'],
                 ['🡸🡺🡹🡻', 'SCROLL'],
-                ['SHIFT_🡸🡺', 'MOVE QUERY CURSOR'],
+                ['SHIFT_🡸🡺', 'MOVE CURSOR'],
             ];
             bindings.forEach(([binding, command]) => {
                 this.queryKeyPanel.buffer.insert(binding, {inverse: true, bold: true});
                 this.queryKeyPanel.buffer.insert(' ' + command);
-                this.queryKeyPanel.buffer.insert('    ');
+                this.queryKeyPanel.buffer.insert('   ');
             });
         });
 
@@ -86,6 +88,13 @@ export class Display {
 
         this.filterPanel = new FilterPanel(this.rootPanel.buffer, {
             name: 'filter',
+            width: 1,
+            height: 1,
+            flex: {width: true},
+        });
+
+        this.formatPanel = new FormatPanel(this.rootPanel.buffer, {
+            name: 'format',
             width: 1,
             height: 1,
             flex: {width: true},
@@ -241,6 +250,23 @@ export class Display {
 
     public hideFilterPanel() {
         if(this.rootPanel.removeChild(this.filterPanel)) {
+            this.rootPanel.resize();
+            (this.terminal as any).hideCursor(false);
+        }
+    }
+
+    public showFormatPanel() {
+        if(this.formatPanel.parent !== undefined) {
+            return;
+        }
+
+        this.rootPanel.addChild(this.formatPanel);
+        this.rootPanel.resize();
+        (this.terminal as any).hideCursor();
+    }
+
+    public hideFormatPanel() {
+        if(this.rootPanel.removeChild(this.formatPanel)) {
             this.rootPanel.resize();
             (this.terminal as any).hideCursor(false);
         }

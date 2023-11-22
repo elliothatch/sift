@@ -89,7 +89,7 @@ export class FilterPanel extends Panel<ScreenBuffer> {
             region: {
                 x: 0,
                 y: 0,
-                width: this.enabledPanel.calculatedWidth,
+                width: this.keyPanel.calculatedWidth,
                 height: 1
             },
             attr: {underline: true}

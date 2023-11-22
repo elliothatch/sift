@@ -43,7 +43,7 @@ As each log is ingested, it is assigned a unique "Log Index", which is visible i
 ## keyboard commands
 To view in-app help, type `\?` (backslash, followed by a question mark).
 
-Sift uses a modular menu system. The default view on start-up is QUERY MODE.
+Sift uses a modal menu system. The default view on start-up is QUERY MODE.
 
 ### query mode
 Logs are interactively fuzzy-filtered as you type your query. See "query language" below for details.  
@@ -60,6 +60,8 @@ Sift also recognizes the following keyboard commands:
  - `END`: Jump to last entry and *resume auto scroll*.
  - `SHIFT_LEFT/RIGHT ARROWS`: Move query cursor left/right.
  - `CTRL_LEFT/RIGHT ARROWS`: Select previous/next window, when split windows are used.
+ - `SHIFT_PAGE_UP`: Increase fuzzy matching threshold, broadening results.
+ - `SHIFT_PAGE_DOWN`: Decrease fuzzy matching threshold, narrowing results.
 
 Changing the selection with `UP/DOWN/PAGE_UP/PAGE_DOWN/HOME` pauses log auto scrolling. Resume auto scrolling by pressing `END` to jump to the end of the logs.
 
@@ -69,11 +71,15 @@ Sift currently supports the following commands:
 
  - `\`: insert \
  - `f`: Enter filter mode
+ - `m`: Enter message formatting mode
  - `c`: close the current log panel
  - `g`: goto log
  - `s`: spawn process
- - `v`: split the current log panel into two windows
+ - `v`: vertically split the current log panel
  - `?`: display help
+
+
+See the in-app help page for information about all modes.
 
 ## query language
 Sift uses a simple query language to find and filter JSON objects.
@@ -117,9 +123,9 @@ Dot notation works to any depth, and can be combined with a colon to match a spe
 > node.data.id:42
 ```
 
-All queries are matched using a case-insensitive fuzzy string matching algorithm. You can make the search more inclusive with `PAGE UP` or more strict with `PAGE DOWN`.
+All queries are matched using a case-insensitive fuzzy string matching algorithm. You can make the search more strict with `SHIFT_PAGE UP` or more inclusive with `SHIFT_PAGE DOWN`.
 
-The algorithm is provided by the [farzher/fuzzysort](https://github.com/farzher/fuzzysort/) library. It seems to be biased toward searching filename-like strings, and tends to give much higher scores to matches at the beginning of words, capital letters, after periods, etc. If a query isn't returning the results you want, try relaxing the search threshold (removed for v1.1.0).
+The algorithm is provided by the [farzher/fuzzysort](https://github.com/farzher/fuzzysort/) library. It seems to be biased toward searching filename-like strings, and tends to give much higher scores to matches at the beginning of words, capital letters, after periods, etc. If a query isn't returning the results you want, try relaxing the search threshold.
 
 Non-string datatypes are interpreted as strings during the filtering process.
 
@@ -137,8 +143,6 @@ You can also surround part of a query with quotation marks (") to search for a l
 
 # known issues
  - Queries with more than one pair of quotation marks don't work as intended.
- - Scrolling with CTRL_E/CTRL_Y uses top-of-window alignment instead of bottom-of-window like all other navigations.
- - Closing the window of a running process without killing the process makes the window unrecoverable, and causes a crash on exit.
 
 
 # roadmap
@@ -151,6 +155,7 @@ Sift is in very early development, and could be improved by the addition of seve
  - Query history: History of queries and commands used to spawn processes.
 
 # changelog
+ - 1.1.2: Add fuzzy matching threshold controls. Add basic formatting mode. Fix bugs with scrolling and closing panels. Expand in-app help.
  - 1.1.1: Fix conditional formatting not using query highlighting. Fix typos in README.
  - 1.1.0: Complete overhaul of UI, introducing scrollable selection, command mode, multiple panels, and more. Fixed several bugs, including array items not being indexed, and some logs being printed in the same color as the background.
  - 1.0.11: Fix boolean values not being displayed. When query is changed, enable autoscroll and scroll to last log.

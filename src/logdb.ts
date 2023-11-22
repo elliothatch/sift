@@ -313,8 +313,6 @@ export class LogDb {
     public logs: LogRecord[];
     public logIndex: LogIndex;
 
-    public fuzzysortThreshold: number;
-
     public logSubject: Subject<LogRecord>;
     // public maxLogEntries = 1000000;
 
@@ -326,8 +324,6 @@ export class LogDb {
             valueIndex: new Map(),
             values: [],
         };
-        this.fuzzysortThreshold = -100;
-
         this.logSubject = new Subject();
     }
 
@@ -357,7 +353,7 @@ export class LogDb {
 
     // BUG: full match doesn't dowrk
     // BUG: full match with child property doesn't actually check value side of match
-    public matchLog(query: Parse.Expression, record: LogRecord): ResultSet.Match[] {
+    public matchLog(query: Parse.Expression, record: LogRecord, fuzzysortThreshold: number): ResultSet.Match[] {
         switch(query.eType) {
             case 'VALUE':
                 // filtering on just a VALUE expression searches the term as a property OR value
@@ -373,7 +369,7 @@ export class LogDb {
                         mType: 'VALUE',
                         value: query,
                     }
-                }, record);
+                }, record, fuzzysortThreshold);
             case 'EXCLUDE':
                 // filtering on just an EXCLUDE expression excludes matches in the property AND value fields
                 return this.matchLog({
@@ -388,16 +384,16 @@ export class LogDb {
                         mType: 'VALUE',
                         value: query
                     }
-                }, record);
+                }, record, fuzzysortThreshold);
             case 'MATCH':
-                return this.evaluateMatch(query, record);
+                return this.evaluateMatch(query, record, fuzzysortThreshold);
             case 'AND': {
                 const lhsMatches = query.lhs?
-                    this.matchLog(query.lhs, record):
+                    this.matchLog(query.lhs, record, fuzzysortThreshold):
                     [];
 
                 const rhsMatches = query.rhs?
-                    this.matchLog(query.rhs, record):
+                    this.matchLog(query.rhs, record, fuzzysortThreshold):
                     [];
 
                 if(lhsMatches.length == 0 || rhsMatches.length == 0) {
@@ -408,11 +404,11 @@ export class LogDb {
             }
             case 'OR': {
                 const lhsMatches = query.lhs?
-                    this.matchLog(query.lhs, record):
+                    this.matchLog(query.lhs, record, fuzzysortThreshold):
                     [];
 
                 const rhsMatches = query.rhs?
-                    this.matchLog(query.rhs, record):
+                    this.matchLog(query.rhs, record, fuzzysortThreshold):
                     [];
 
                 return lhsMatches.concat(rhsMatches);
@@ -422,24 +418,24 @@ export class LogDb {
         }
     }
 
-    public evaluateMatch(matchQuery: Parse.Expression.MATCH, record: LogRecord): ResultSet.Match[] {
+    public evaluateMatch(matchQuery: Parse.Expression.MATCH, record: LogRecord, fuzzysortThreshold: number): ResultSet.Match[] {
         if((matchQuery.mType === 'FULL' || matchQuery.mType === 'PROPERTY')
             && matchQuery.property.eType !== 'EXCLUDE') {
-            return this.matchFullOrProperty(matchQuery, record);
+            return this.matchFullOrProperty(matchQuery, record, fuzzysortThreshold);
         }
         else if((matchQuery.mType === 'FULL' || matchQuery.mType === 'VALUE')
             && matchQuery.value.eType !== 'EXCLUDE') {
-            return this.matchFullOrValue(matchQuery, record);
+            return this.matchFullOrValue(matchQuery, record, fuzzysortThreshold);
         }
         else if(matchQuery.mType === 'FULL' || matchQuery.mType === 'ALL') {
             // both fields are excluded or match all
             return [{logRecord: record}];
         }
         else if(matchQuery.mType === 'PROPERTY') {
-            return this.matchExcludeProperty(matchQuery, record);
+            return this.matchExcludeProperty(matchQuery, record, fuzzysortThreshold);
         }
         else if(matchQuery.mType === 'VALUE') {
-            return this.matchExcludeValue(matchQuery, record);
+            return this.matchExcludeValue(matchQuery, record, fuzzysortThreshold);
         }
         else {
             throw new Error(`evaluateMatch: unhandled match query: ${matchQuery}`);
@@ -447,13 +443,13 @@ export class LogDb {
     }
 
 
-    public matchFullOrProperty(matchQuery: Parse.Expression.MATCH.FULL_MATCH | Parse.Expression.MATCH.PROPERTY_MATCH, record: LogRecord): ResultSet.Match[] {
+    public matchFullOrProperty(matchQuery: Parse.Expression.MATCH.FULL_MATCH | Parse.Expression.MATCH.PROPERTY_MATCH, record: LogRecord, fuzzysortThreshold: number): ResultSet.Match[] {
             // search by property index
             const matches: ResultSet.Match[] = [];
             for(let property of record.index.properties.values()) {
                 const searchProperty = (matchQuery.property as Parse.Expression.VALUE).value;
                 const propertyMatch = fuzzysort.single(searchProperty, property);
-                if(!propertyMatch || propertyMatch.score < this.fuzzysortThreshold) continue;
+                if(!propertyMatch || propertyMatch.score < fuzzysortThreshold) continue;
 
                 // TODO: match properties more precisely. fuzzy search means that we always match all the children of a property as well which isn't really what we want
                 // redo the match just with the final part so we only include highlight results for the exact property, and not all its parents
@@ -461,7 +457,7 @@ export class LogDb {
                 // const propertyParts = property.split('.');
                 // const propertyHighlightMatch = fuzzysort.single(searchPropertyParts[searchPropertyParts.length - 1], propertyParts[propertyParts.length - 1]);
 
-                // if(!propertyHighlightMatch || propertyHighlightMatch.score < this.fuzzysortThreshold) continue;
+                // if(!propertyHighlightMatch || propertyHighlightMatch.score < fuzzysortThreshold) continue;
                 let match: ResultSet.Match = {
                     logRecord: record,
                     property: {
@@ -482,7 +478,7 @@ export class LogDb {
                         matchQuery.value.expr.value;
 
                     let valueMatch = fuzzysort.single(searchValue, value.toString());
-                    if(!valueMatch || valueMatch.score < this.fuzzysortThreshold) {
+                    if(!valueMatch || valueMatch.score < fuzzysortThreshold) {
                         valueMatch = null;
                     }
 
@@ -514,12 +510,12 @@ export class LogDb {
             return matches;
     }
 
-    public matchFullOrValue(matchQuery: Parse.Expression.MATCH.FULL_MATCH | Parse.Expression.MATCH.VALUE_MATCH, record: LogRecord): ResultSet.Match[] {
+    public matchFullOrValue(matchQuery: Parse.Expression.MATCH.FULL_MATCH | Parse.Expression.MATCH.VALUE_MATCH, record: LogRecord, fuzzysortThreshold: number): ResultSet.Match[] {
         // search by property index
         const matches: ResultSet.Match[] = [];
         for(let [value, properties] of record.index.values.entries()) {
             const valueMatch = fuzzysort.single((matchQuery.value as Parse.Expression.VALUE).value, value);
-            if(!valueMatch || valueMatch.score < this.fuzzysortThreshold) continue;
+            if(!valueMatch || valueMatch.score < fuzzysortThreshold) continue;
 
             for(let property of properties) {
                 let match: ResultSet.Match = {
@@ -541,7 +537,7 @@ export class LogDb {
                         matchQuery.property.expr.value;
 
                     let propertyMatch = fuzzysort.single(searchProperty, property);
-                    if(!propertyMatch || propertyMatch.score < this.fuzzysortThreshold) {
+                    if(!propertyMatch || propertyMatch.score < fuzzysortThreshold) {
                         propertyMatch = null;
                     }
 
@@ -569,10 +565,10 @@ export class LogDb {
         return matches;
     }
 
-    public matchExcludeProperty(matchQuery: Parse.Expression.MATCH.PROPERTY_MATCH, record: LogRecord): ResultSet.Match[] {
+    public matchExcludeProperty(matchQuery: Parse.Expression.MATCH.PROPERTY_MATCH, record: LogRecord, fuzzysortThreshold: number): ResultSet.Match[] {
         for(let property of record.index.properties.values()) {
             const propertyMatch = fuzzysort.single((matchQuery.property as Parse.Expression.EXCLUDE).expr.value, property);
-            if(propertyMatch && propertyMatch.score >= this.fuzzysortThreshold) {
+            if(propertyMatch && propertyMatch.score >= fuzzysortThreshold) {
                 return [];
             }
         }
@@ -583,10 +579,10 @@ export class LogDb {
     }
 
     /** return an empty match if the log matches the value */
-    public matchExcludeValue(matchQuery: Parse.Expression.MATCH.VALUE_MATCH, record: LogRecord): ResultSet.Match[] {
+    public matchExcludeValue(matchQuery: Parse.Expression.MATCH.VALUE_MATCH, record: LogRecord, fuzzysortThreshold: number): ResultSet.Match[] {
         for(let [value, propertySet] of record.index.values.entries()) {
             const valueMatch = fuzzysort.single((matchQuery.value as Parse.Expression.EXCLUDE).expr.value, value);
-            if(valueMatch && valueMatch.score >= this.fuzzysortThreshold) {
+            if(valueMatch && valueMatch.score >= fuzzysortThreshold) {
                 return [];
             }
         }
@@ -596,7 +592,7 @@ export class LogDb {
         }];
     }
 
-    public filterAll(query: Parse.Expression): Observable<FilterMatch> {
+    public filterAll(query: Parse.Expression, fuzzysortThreshold: number): Observable<FilterMatch> {
         const filteredResultSet: ResultSet = {
             matches: new Map(),
             index: {
@@ -618,7 +614,7 @@ export class LogDb {
                         }
 
                         const record = _this.logs[index];
-                        const matches = _this.matchLog(query, record);
+                        const matches = _this.matchLog(query, record, fuzzysortThreshold);
                         matches.forEach((match) => ResultSet.addMatch(match, filteredResultSet, true))
 
                         if(matches.length === 0) {
