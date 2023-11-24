@@ -3,7 +3,7 @@
 
 Sift is a NodeJs command-line tool that provides an interactive interface for viewing and searching structured log data.  
 
-![Sift demonstration](images/demo.gif)
+https://github.com/elliothatch/sift/assets/2262577/a4bbf221-9c6b-47c4-9e8f-d1957699c380
 
 # install
 ```
@@ -65,11 +65,13 @@ Sift also recognizes the following keyboard commands:
 
 Changing the selection with `UP/DOWN/PAGE_UP/PAGE_DOWN/HOME` pauses log auto scrolling. Resume auto scrolling by pressing `END` to jump to the end of the logs.
 
+See the in-app help page for a list of all key bindings.
+
 ### command mode
 Press backslash `\` to enter COMMAND MODE and open a menu with additional actions. Press the listed key to perform an action, or press `ESCAPE` or `CTRL_C` to return to QUERY MODE.  
 Sift currently supports the following commands:
 
- - `\`: insert \
+ - `\`: insert \ into query
  - `f`: Enter filter mode
  - `m`: Enter message formatting mode
  - `c`: close the current log panel
@@ -123,7 +125,9 @@ Dot notation works to any depth, and can be combined with a colon to match a spe
 > node.data.id:42
 ```
 
-All queries are matched using a case-insensitive fuzzy string matching algorithm. You can make the search more strict with `SHIFT_PAGE UP` or more inclusive with `SHIFT_PAGE DOWN`.
+All queries are matched using a case-insensitive fuzzy string matching algorithm. When you enter a query, each matching property and value across all logs is assigned a score based on how closely it matches the query. Logs are only displayed if the score for each part of the query exceeds the fuzzy matching threshold.
+
+The default threshold has been selected to filter out irrelevant results, without excluding close matches, but in some cases can be too restrictive or permissive, especially for logs containing very long strings. You can make the search more strict with `SHIFT_PAGE UP` or more inclusive with `SHIFT_PAGE DOWN`.
 
 The algorithm is provided by the [farzher/fuzzysort](https://github.com/farzher/fuzzysort/) library. It seems to be biased toward searching filename-like strings, and tends to give much higher scores to matches at the beginning of words, capital letters, after periods, etc. If a query isn't returning the results you want, try relaxing the search threshold.
 
@@ -140,6 +144,31 @@ More complex queries can be created with unary and binary operators.
    - `key:!value`: matches objects with "key" property, if the value of "key" doesn't match "value". Example: `error:!connection` returns logs with a property matching `error` only if the value associated with that property does not match `connection`.
 
 You can also surround part of a query with quotation marks (") to search for a literal string, in case you want to search for a string containing sift operators. This is currently buggy and doesn't work if your query contains more than one quoted string.
+
+## filters
+Filters are customizable, persistent queries that can be toggled on and off to refine a search without needing to retype them every time. They are applied to the typed query as additional AND rules.
+
+Access Filter Mode through the command panel by typing `\f`.
+
+## formatting
+The single-line text summary for each log is built from a list of text substitution rules. These rules can extract fields from the log's content and display them in various styles and colors, using conditional formatting rules.
+
+The default format is `[{timestamp}][{level}]{message}`, with coloring rules for logs with certain `level` values.
+ - `info`: white
+ - `warn`: yellow
+ - `error`: red
+ - `sift`: cyan (`sift` level logs are added by sift, e.g. indicating the process terminate).
+
+ Other logs levels are displayed in a dim gray.
+
+The `timestamp` field is hidden on start-up, and can be enabled by entering Message FormattingMode by typing `\m`.
+
+In the current version of Sift, you cannot create or edit formatting rules.
+
+## split windows
+Sift can display multiple log streams at once in split windows. You can also view the same stream in multiple windows at once, with different queries, filters, and formatting rules for each window.
+
+Spawn a process in a new window by typing `\s` and entering a command. Create a vertical split of an existing stream by typing `\v`. Press `CTRL_C` to terminate a running process or to close the window of a stopped process, or type `\c` to close a window without killing the process.
 
 # known issues
  - Queries with more than one pair of quotation marks don't work as intended.
