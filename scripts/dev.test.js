@@ -43,7 +43,7 @@ function generateRandomTree(depth) {
 
 	return {
 		data: Math.floor(Math.random() * 10000000),
-		name: randomString(Math.floor(Math.random() * 8)),
+		name: randomString(Math.floor(Math.random() * 8 + 1)),
 		depth,
 		special: depth%3 === 0? true: undefined,
 		left: generateRandomTree(depth - 1 - Math.floor(Math.random()*2)),
@@ -59,6 +59,11 @@ function generateRandomArray(items) {
 		});
 	}
 	return arr;
+}
+
+const names = ['alice', 'bob', 'charlie', 'diego', 'elliot', 'francis', 'gloria', 'hershel', 'indio', 'jessica', 'kelly', 'laura', 'matt', 'nicholas', 'olive', 'patrisha', 'qamar', 'rory', 'samantha', 'taylor', 'ursa', 'victor', 'wren', 'xi', 'yaroslav', 'zachary'];
+function generateRandomName() {
+	return names[Math.floor(Math.random()*names.length)];
 }
 
 idx = 0;
@@ -92,7 +97,7 @@ rxjs.timer(0, logDelay).subscribe((x) => {
 		level = 'trace';
 	}
 
-	let message = messageNouns[Math.floor(Math.random()*messageNouns.length)] + ' ' + messageVerbs[Math.floor(Math.random()*messageVerbs.length)] + ` '${randomString(Math.floor(Math.random() * 12))}'` ;
+	let message = messageNouns[Math.floor(Math.random()*messageNouns.length)] + ' ' + messageVerbs[Math.floor(Math.random()*messageVerbs.length)] + ` '${randomString(Math.floor(Math.random() * 12)+1)}'` ;
 	if(Math.random() < 0.05) {
 		message += randomString(80) + 'end';
 	}
@@ -100,20 +105,20 @@ rxjs.timer(0, logDelay).subscribe((x) => {
 		level,
 		message,
 		{
-			tree: generateRandomTree(initialTreeDepth),
+			// tree: generateRandomTree(initialTreeDepth),
 			record: {
 				owner: {
-					id: Math.floor(Math.random()*8),
-					firstname: randomString(Math.floor(Math.random()*8)),
-					lastname: randomString(Math.floor(Math.random()*12)),
+					id: Math.floor(Math.random()*1000),
+					firstname: generateRandomName(),
+					lastname: generateRandomName(),
 				},
 				entries: generateRandomArray(Math.floor(Math.random()*5)),
 			},
 			man: {
-				name: 'bob',
+				name: generateRandomName(),
 				roadsWalkedDown: Math.floor(Math.random()*10000),
 				[randomString(10)]: messageNouns[Math.floor(Math.random()*messageNouns.length)] ,
-				children: ['alice', 'charlie', ['diego', 'elliot']]
+				children: [generateRandomName(), generateRandomName(), [generateRandomName(), generateRandomName()]]
 			},
 			isYes: Math.random() < 0.5? true: false,
 		}

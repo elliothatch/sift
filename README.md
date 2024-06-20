@@ -184,6 +184,7 @@ Sift is in very early development, and could be improved by the addition of seve
  - Query history: History of queries and commands used to spawn processes.
 
 # changelog
+ - 1.1.3: Remove npm-shrinkwrap because it forces devDependencies to install on a global install, with precedence over the rxjs version declared in package.json.
  - 1.1.2: Add fuzzy matching threshold controls. Add basic formatting mode. Fix bugs with scrolling and closing panels. Expand in-app help.
  - 1.1.1: Fix conditional formatting not using query highlighting. Fix typos in README.
  - 1.1.0: Complete overhaul of UI, introducing scrollable selection, command mode, multiple panels, and more. Fixed several bugs, including array items not being indexed, and some logs being printed in the same color as the background.
@@ -226,7 +227,7 @@ yarn test
 yarn clean
 yarn build
 yarn test
-yarn shrinkwrap
+#yarn shrinkwrap
 yarn version
 # push changes
 yarn publish
