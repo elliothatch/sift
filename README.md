@@ -184,6 +184,7 @@ Sift is in very early development, and could be improved by the addition of seve
  - Query history: History of queries and commands used to spawn processes.
 
 # changelog
+ - 1.1.4: Use standard unicode arrow symbols in controls instead of less supported "Block" arrows
  - 1.1.3: Remove npm-shrinkwrap because it forces devDependencies to install on a global install, with precedence over the rxjs version declared in package.json.
  - 1.1.2: Add fuzzy matching threshold controls. Add basic formatting mode. Fix bugs with scrolling and closing panels. Expand in-app help.
  - 1.1.1: Fix conditional formatting not using query highlighting. Fix typos in README.
@@ -223,6 +224,7 @@ yarn test
 ```
 
 # publish
+Update SIFT_VERSION in `sift.ts`.
 ```bash
 yarn clean
 yarn build

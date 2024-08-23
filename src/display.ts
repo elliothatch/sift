@@ -67,8 +67,9 @@ export class Display {
             const bindings = [
                 ['CTRL_C', 'EXIT'],
                 ['\\', 'COMMANDS'],
-                ['🡸🡺🡹🡻', 'SCROLL'],
-                ['SHIFT_🡸🡺', 'MOVE CURSOR'],
+                ['↑↓←→', 'SCROLL'],
+                ['SHIFT_←→', 'MOVE CURSOR'],
+                ['SHIFT_PGUP/PGDN', 'FUZZY THRESH'],
             ];
             bindings.forEach(([binding, command]) => {
                 this.queryKeyPanel.buffer.insert(binding, {inverse: true, bold: true});

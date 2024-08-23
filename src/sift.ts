@@ -7,6 +7,8 @@ import { LogStreamPanel } from './logstreampanel';
 import { Input } from './input';
 import { Command } from './commandpanel';
 
+const SIFT_VERSION = 'v1.1.4';
+
 export class Sift {
     public display: Display;
     public input: Input;
@@ -72,7 +74,7 @@ export class Sift {
             }
         });
 
-        this.siftLogsSubject.next('sift v1.1.2');
+        this.siftLogsSubject.next(`sift ${SIFT_VERSION}`);
         this.siftLogsSubject.next(''),
         this.siftLogsSubject.next('Elliot Hatch 2023'),
         this.siftLogsSubject.next('sift is open source. https://github.com/elliothatch/sift'),
@@ -600,7 +602,7 @@ export class Sift {
                 fn: (key, matches, data) => {
 
                     const helpText: Array<string | {level: string, message: string}> = [
-                        {level: 'sift', message: 'sift v1.1.2'},
+                        {level: 'sift', message: `sift ${SIFT_VERSION}`},
                         {level: 'sift', message: ''},
                         {level: 'sift', message: 'Elliot Hatch 2023'},
                         {level: 'sift', message: 'sift is open source. https://github.com/elliothatch/sift'},
