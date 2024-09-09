@@ -58,23 +58,30 @@ export class Display {
         this.queryKeyPanel = new TextPanel(this.rootPanel.buffer, {
             name: 'query-keys',
             width: 1,
-            height: 1,
+            height: 2,
             flex: {width: true}
         }, () => {
-            (this.queryKeyPanel.buffer as any).setText('');
-            (this.queryKeyPanel.buffer as any).moveTo(0, 0);
             // TODO: instead of hardcoding these values, get them from the input bindings? probably not worth it.
-            const bindings = [
-                ['CTRL_C', 'EXIT'],
-                ['\\', 'COMMANDS'],
+            const bindings = [[
                 ['↑↓←→', 'SCROLL'],
                 ['SHIFT_←→', 'MOVE CURSOR'],
                 ['SHIFT_PGUP/PGDN', 'FUZZY THRESH'],
-            ];
-            bindings.forEach(([binding, command]) => {
-                this.queryKeyPanel.buffer.insert(binding, {inverse: true, bold: true});
-                this.queryKeyPanel.buffer.insert(' ' + command);
-                this.queryKeyPanel.buffer.insert('   ');
+            ], [
+                ['CTRL_C', 'EXIT'],
+                ['\\', 'COMMANDS'],
+                ['TAB', 'SEARCH/FILTER'],
+                ['CTRL_N', 'NEXT MATCH'],
+                ['CTRL_P', 'PREV MATCH'],
+            ]];
+
+            (this.queryKeyPanel.buffer as any).setText('');
+            bindings.forEach((row, i) => {
+                (this.queryKeyPanel.buffer as any).moveTo(0, i);
+                row.forEach(([binding, command]) => {
+                    this.queryKeyPanel.buffer.insert(binding, {inverse: true, bold: true});
+                    this.queryKeyPanel.buffer.insert(' ' + command);
+                    this.queryKeyPanel.buffer.insert('   ');
+                });
             });
         });
 

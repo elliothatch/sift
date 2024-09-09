@@ -69,11 +69,12 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
     public horizontalScrollMax: number = 0;
     /** set of all logs that are expanded */
     public expandedLogs: Set<LogIdx>;
+    /** logs that are highlighted on the idxPanel, used for search mode */
+    public highlightedLogs: Map<LogIdx, LogRecord>;
 
     public selectionIndex: number = 0;
     /** if the cursor is in an expanded log, this is the offset */
     public selectionScrollPosition: number = 0;
-
 
 
     constructor(dst: Buffer | Terminal, options: Panel.Options, logDisplayOptions?: Partial<LogDisplayPanel.Options>) {
@@ -103,6 +104,7 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
 
         this.logEntryCache = new Map();
         this.expandedLogs = new Set();
+        this.highlightedLogs = new Map();
 
         // TODO: width/height calculation is wrong if FLEX enabled?? */
         this.logs = [];
@@ -466,6 +468,55 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
         this.markDirty();
     }
 
+    /** returns the row on the screen that the selection is on */
+    public getSelectionRow(): number {
+        if(this.logs.length === 0) {
+            return -1;
+        }
+
+        let entryIdx = this.scrollLogIndex;
+        let entryScrollPos = this.scrollPosition;
+
+        for(let i = 0; i < this.logPanel.calculatedHeight; i++) {
+            if(entryIdx >= this.logs.length) {
+                return -1;
+            }
+
+            const record = this.logs[entryIdx];
+            const logEntry = this.getLogEntry(record);
+
+            if(this.selectionIndex === entryIdx && this.selectionScrollPosition === entryScrollPos) {
+                return i;
+            }
+
+            entryScrollPos++;
+
+            const logHeight = logEntry.getContentSize().height;
+            if(entryScrollPos >= logHeight) {
+                // reached end of log, move onto next
+                entryIdx++;
+                entryScrollPos = 0;
+            }
+        }
+
+        return  1;
+    }
+
+    /** scrolls to place the the selected log at the desired postiion relative from the top of the page */
+    public scrollSelectionToRow(row: number) {
+        // place the selection at the top of the screen
+        this.scrollLogIndex = this.selectionIndex;
+        this.scrollPosition = this.selectionScrollPosition;
+
+        if(this.logs.length === 0) {
+            return;
+        }
+
+        this.scrollUp(row);
+
+        this.markDirty();
+    }
+
     public selectLog(index: number) {
         this.selectionIndex = Math.min(Math.max(0, index), this.logs.length);
         this.selectionScrollPosition = 0;
@@ -678,11 +729,14 @@ export class LogDisplayPanel extends Panel<ScreenBuffer> {
 
     public printIdx(idx: LogIdx, row: number) {
 
-        const attr = idx % 10 === 0?
-            {color: 'brightWhite', bold: true}:
+        const attr = 
+            this.highlightedLogs.has(idx)?
+                {inverse: true, color: 'cyan', bold: true}:
+            idx % 10 === 0?
+                {color: 'brightWhite', bold: true}:
             idx % 2 === 1?
-            {inverse: true, color: 'grey'}:
-            {inverse: true, color: 'white'};
+                {inverse: true, color: 'grey'}:
+                {inverse: true, color: 'white'};
 
         const idxStr = idx.toString();
 

@@ -62,8 +62,13 @@ Sift also recognizes the following keyboard commands:
  - `CTRL_LEFT/RIGHT ARROWS`: Select previous/next window, when split windows are used.
  - `SHIFT_PAGE_UP`: Increase fuzzy matching threshold, broadening results.
  - `SHIFT_PAGE_DOWN`: Decrease fuzzy matching threshold, narrowing results.
+ - `TAB`: Toggle Search/Filter views
+ - `CTRL_N`: Jump to next match in search mode
+ - `CTRL_P`: Jump to previous match in search mode
 
 Changing the selection with `UP/DOWN/PAGE_UP/PAGE_DOWN/HOME` pauses log auto scrolling. Resume auto scrolling by pressing `END` to jump to the end of the logs.
+
+Pressing `TAB` switches between filter view (default) and search view. In filter view, only logs that match the filter are displayed. In search view, all logs are displayed, and logs that match the filter are highlighted. Use `CTRL_N` and `CTRL_P` to jump to between matches.
 
 See the in-app help page for a list of all key bindings.
 
@@ -184,6 +189,7 @@ Sift is in very early development, and could be improved by the addition of seve
  - Query history: History of queries and commands used to spawn processes.
 
 # changelog
+ - 1.2.0: Add search view to jump between filter matches without hiding unfiltered logs.
  - 1.1.4: Use standard unicode arrow symbols in controls instead of less supported "Block" arrows
  - 1.1.3: Remove npm-shrinkwrap because it forces devDependencies to install on a global install, with precedence over the rxjs version declared in package.json.
  - 1.1.2: Add fuzzy matching threshold controls. Add basic formatting mode. Fix bugs with scrolling and closing panels. Expand in-app help.

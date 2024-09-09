@@ -7,7 +7,7 @@ import { LogStreamPanel } from './logstreampanel';
 import { Input } from './input';
 import { Command } from './commandpanel';
 
-const SIFT_VERSION = 'v1.1.4';
+const SIFT_VERSION = 'v1.2.0';
 
 export class Sift {
     public display: Display;
@@ -342,7 +342,7 @@ export class Sift {
                     this.currentLogStreamPanel.logDisplayPanel.toggleExpandSelection();
                     this.currentLogStreamPanel.logDisplayPanel.scrollToMaximizeLog(this.currentLogStreamPanel.logDisplayPanel.selectionIndex);
                     this.currentLogStreamPanel.autoscroll = false;
-                    this.currentLogStreamPanel.queryResultsPanel.markDirty();
+                    this.currentLogStreamPanel.queryResultsMatchesPanel.markDirty();
                     this.display.draw();
                 }
             },
@@ -352,7 +352,7 @@ export class Sift {
                     this.currentLogStreamPanel.logDisplayPanel.moveSelectionUp(1);
                     this.currentLogStreamPanel.logDisplayPanel.scrollToSelection();
                     this.currentLogStreamPanel.autoscroll = false;
-                    this.currentLogStreamPanel.queryResultsPanel.markDirty();
+                    this.currentLogStreamPanel.queryResultsMatchesPanel.markDirty();
                     this.display.draw();
                 }
             },
@@ -362,7 +362,7 @@ export class Sift {
                     this.currentLogStreamPanel.logDisplayPanel.moveSelectionDown(1);
                     this.currentLogStreamPanel.logDisplayPanel.scrollToSelection();
                     this.currentLogStreamPanel.autoscroll = false;
-                    this.currentLogStreamPanel.queryResultsPanel.markDirty();
+                    this.currentLogStreamPanel.queryResultsMatchesPanel.markDirty();
                     this.display.draw();
                 }
             },
@@ -374,6 +374,7 @@ export class Sift {
                     if(bottomPosition && this.currentLogStreamPanel.logDisplayPanel.selectionIndex > bottomPosition.entryIndex) {
                         this.currentLogStreamPanel.logDisplayPanel.moveSelectionUp(1);
                     }
+                    this.currentLogStreamPanel.queryResultsMatchesPanel.markDirty();
                     this.display.draw();
                 }
             },
@@ -384,6 +385,7 @@ export class Sift {
                     if(this.currentLogStreamPanel.logDisplayPanel.selectionIndex < this.currentLogStreamPanel.logDisplayPanel.scrollLogIndex) {
                         this.currentLogStreamPanel.logDisplayPanel.moveSelectionDown(1);
                     }
+                    this.currentLogStreamPanel.queryResultsMatchesPanel.markDirty();
                     this.display.draw();
                 }
             },
@@ -407,7 +409,7 @@ export class Sift {
                     this.currentLogStreamPanel.logDisplayPanel.moveSelectionUp(20);
                     this.currentLogStreamPanel.logDisplayPanel.scrollToSelection();
                     this.currentLogStreamPanel.autoscroll = false;
-                    this.currentLogStreamPanel.queryResultsPanel.markDirty();
+                    this.currentLogStreamPanel.queryResultsMatchesPanel.markDirty();
                     this.display.draw();
                 }
             },
@@ -417,7 +419,7 @@ export class Sift {
                     this.currentLogStreamPanel.logDisplayPanel.moveSelectionDown(20);
                     this.currentLogStreamPanel.logDisplayPanel.scrollToSelection();
                     this.currentLogStreamPanel.autoscroll = false;
-                    this.currentLogStreamPanel.queryResultsPanel.markDirty();
+                    this.currentLogStreamPanel.queryResultsMatchesPanel.markDirty();
                     this.display.draw();
                 }
             },
@@ -427,7 +429,7 @@ export class Sift {
                     this.currentLogStreamPanel.logDisplayPanel.selectLog(0);
                     this.currentLogStreamPanel.logDisplayPanel.scrollToSelection();
                     this.currentLogStreamPanel.autoscroll = false;
-                    this.currentLogStreamPanel.queryResultsPanel.markDirty();
+                    this.currentLogStreamPanel.queryResultsMatchesPanel.markDirty();
                     this.display.draw();
                 }
             }, 
@@ -437,10 +439,49 @@ export class Sift {
                     this.currentLogStreamPanel.logDisplayPanel.selectLog(this.currentLogStreamPanel.logDisplayPanel.logs.length - 1);
                     this.currentLogStreamPanel.logDisplayPanel.scrollToSelection();
                     this.currentLogStreamPanel.autoscroll = true;
-                    this.currentLogStreamPanel.queryResultsPanel.markDirty();
+                    this.currentLogStreamPanel.queryResultsMatchesPanel.markDirty();
                     this.display.draw();
                 }
             }, 
+            'toggleSearchMode': {
+                description: 'Toggle between filter mode and search mode',
+                fn: () => {
+                    this.currentLogStreamPanel.setSearchMode(!this.currentLogStreamPanel.searchMode);
+                    this.display.draw();
+                }
+            },
+            'selectNextMatch': {
+                description: 'In search mode, select the next matching log',
+                fn: () => {
+                    if(!this.currentLogStreamPanel.searchMode || this.currentLogStreamPanel.logDisplayPanel.logs.length === 0) {
+                        return;
+                    }
+
+                    const selectedLog = this.currentLogStreamPanel.logDisplayPanel.logs[this.currentLogStreamPanel.logDisplayPanel.selectionIndex];
+                    this.currentLogStreamPanel.autoscroll = false;
+                    this.currentLogStreamPanel.selectNextMatch(selectedLog.idx);
+                    this.currentLogStreamPanel.logDisplayPanel.scrollToSelection();
+
+                    this.currentLogStreamPanel.markDirty();
+                    this.display.draw();
+                }
+            },
+            'selectPreviousMatch': {
+                description: 'In search mode, select the previous matching log',
+                fn: () => {
+                    if(!this.currentLogStreamPanel.searchMode || this.currentLogStreamPanel.logDisplayPanel.logs.length === 0) {
+                        return;
+                    }
+
+                    const selectedLog = this.currentLogStreamPanel.logDisplayPanel.logs[this.currentLogStreamPanel.logDisplayPanel.selectionIndex];
+                    this.currentLogStreamPanel.autoscroll = false;
+                    this.currentLogStreamPanel.selectPreviousMatch(selectedLog.idx);
+                    this.currentLogStreamPanel.logDisplayPanel.scrollToSelection();
+
+                    this.currentLogStreamPanel.markDirty();
+                    this.display.draw();
+                }
+            },
             'queryCursorLeft': {
                 description: 'Move query cursor left',
                 fn: () => {
@@ -922,6 +963,10 @@ export class Sift {
             'PAGE_DOWN': this.actions[Input.Mode.Query].pageDown,
             'HOME': this.actions[Input.Mode.Query].scrollStart,
             'END': this.actions[Input.Mode.Query].scrollEnd,
+
+            'TAB': this.actions[Input.Mode.Query].toggleSearchMode,
+            'CTRL_N': this.actions[Input.Mode.Query].selectNextMatch,
+            'CTRL_P': this.actions[Input.Mode.Query].selectPreviousMatch,
 
             'SHIFT_LEFT': this.actions[Input.Mode.Query].queryCursorLeft,
             'SHIFT_RIGHT': this.actions[Input.Mode.Query].queryCursorRight,

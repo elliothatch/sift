@@ -2,7 +2,7 @@ import { Terminal, Buffer, ScreenBuffer } from 'terminal-kit';
 import { EMPTY, interval, merge, Observable, Subject, Subscription } from 'rxjs';
 import { auditTime, filter, finalize, mergeMap, take, tap } from 'rxjs/operators';
 
-import { LogRecord, ResultSet } from './logdb';
+import { LogIdx, LogRecord, ResultSet } from './logdb';
 import { LogStream } from './logstream';
 import { Parse, Parser } from './query';
 
@@ -45,6 +45,9 @@ export class LogStreamPanel<T extends LogStream = LogStream> extends Panel<Scree
     protected blockDrawLog: boolean = false;
 
     protected parser: Parser;
+    /** matched logs ordered by idx */
+    protected matchedLogs: LogRecord[];
+    protected matchedLogsMap: Map<LogIdx, LogRecord>;
 
     public redrawEvents: Observable<null>;
     protected redrawEventsSubject: Subject<null>;
@@ -53,13 +56,16 @@ export class LogStreamPanel<T extends LogStream = LogStream> extends Panel<Scree
 
     public logDisplayPanel: LogDisplayPanel
     public queryResultsPanel: ScreenPanel;
-    public queryResultsMatchesPanel: TextPanel;
     public queryResultsThresholdPanel: ScreenPanel;
+    public queryResultsSearchModePanel: TextPanel;
+    public queryResultsMatchesPanel: TextPanel;
     protected queryPromptPanel: ScreenPanel;
     protected queryPromptArrowPanel: ScreenPanel;
     public queryPromptInputPanel: TextPanel;
     protected titlePanel: TextPanel;
     protected selected: boolean = false;
+
+    public searchMode: boolean = false;
 
     /** current frame of the spinner animation. if -1, spinner is hidden */
     protected spinnerIndex: number = -1;
@@ -74,7 +80,9 @@ export class LogStreamPanel<T extends LogStream = LogStream> extends Panel<Scree
         }));
 
         this.logStream = logStream;
-        this.parser = new Parser;
+        this.parser = new Parser();
+        this.matchedLogs = [];
+        this.matchedLogsMap = new Map();
 
         this.logDisplayPanel = new LogDisplayPanel(this.buffer, {
             name: `${this.options.name? this.options.name: ''}.logDisplayPanel`,
@@ -102,6 +110,12 @@ export class LogStreamPanel<T extends LogStream = LogStream> extends Panel<Scree
             height: 1,
         }, this.renderQueryResultsThreshold);
 
+        this.queryResultsSearchModePanel = new TextPanel(this.buffer, {
+            name: `${this.options.name? this.options.name: ''}.queryResultsSearchModePanel`,
+            width: 7,
+            height: 1,
+        }, this.renderQueryResultsSearchMode);
+
         this.queryResultsMatchesPanel = new TextPanel(this.buffer, {
             name: `${this.options.name? this.options.name: ''}.queryResultsMatchesPanel`,
             width: 1,
@@ -112,6 +126,7 @@ export class LogStreamPanel<T extends LogStream = LogStream> extends Panel<Scree
         }, this.renderQueryResultsMatches);
 
         this.queryResultsPanel.addChild(this.queryResultsThresholdPanel);
+        this.queryResultsPanel.addChild(this.queryResultsSearchModePanel);
         this.queryResultsPanel.addChild(this.queryResultsMatchesPanel);
 
         this.queryPromptPanel = new ScreenPanel(this.buffer, {
@@ -191,6 +206,7 @@ export class LogStreamPanel<T extends LogStream = LogStream> extends Panel<Scree
             })
         );
 
+        // update when new logs are ingested
         this.logStream.logsObservable.subscribe((record) => {
             if(this.logDisplayPanel.logs === this.logStream.logdb.logs || !this.filter) {
                 this.logDisplayPanel.markDirty();
@@ -202,7 +218,9 @@ export class LogStreamPanel<T extends LogStream = LogStream> extends Panel<Scree
             const matches = this.logStream.logdb.matchLog(this.filter, record, LogStreamPanel.fuzzysortThresholdSteps[this.fuzzysortThresholdIndex]);
 
             if(matches.length > 0) {
-                this.logDisplayPanel.logs.push(record);
+                this.matchedLogs.push(record);
+                this.matchedLogsMap.set(record.idx, record);
+
                 if(!this.logDisplayPanel.resultSet) {
                     this.logDisplayPanel.resultSet = {
                         matches: new Map(),
@@ -241,6 +259,107 @@ export class LogStreamPanel<T extends LogStream = LogStream> extends Panel<Scree
         this.titlePanel.markDirty();
     }
 
+    /** when in search mode, all logs are displayed and the query is used to jump to matching documents */
+    public setSearchMode(searchMode: boolean) {
+        this.searchMode = searchMode;
+        const selectedLog = this.logDisplayPanel.logs.length > 0 && this.logDisplayPanel.logs[this.logDisplayPanel.selectionIndex];
+
+        if(searchMode) {
+            const selectionRow = this.logDisplayPanel.getSelectionRow();
+
+            this.logDisplayPanel.logs = this.logStream.logdb.logs;
+            this.logDisplayPanel.highlightedLogs = this.matchedLogsMap;
+
+            if(selectedLog) {
+                // search mode displays all logs, so the selection index is the same as the log idx
+                this.logDisplayPanel.selectionIndex = selectedLog.idx;
+            }
+
+            if(selectionRow >= 0) {
+                this.logDisplayPanel.scrollSelectionToRow(selectionRow);
+            }
+            else {
+                this.logDisplayPanel.scrollAlignBottom();
+            }
+        }
+        else {
+            const selectionRow = this.logDisplayPanel.getSelectionRow();
+
+            if(this.filter) {
+                this.logDisplayPanel.logs = this.matchedLogs;
+            }
+            else {
+                this.logDisplayPanel.logs = this.logStream.logdb.logs;
+            }
+            this.logDisplayPanel.highlightedLogs = new Map();
+
+            if(selectedLog) {
+                if(this.matchedLogsMap.has(selectedLog.idx)) {
+                    // the selection is in the filtered list, keep it selected
+                    // TODO: use binary search
+                    const selectionIndex = this.matchedLogs.findIndex((record) => record.idx === selectedLog.idx);
+                    this.logDisplayPanel.selectionIndex = selectionIndex;
+                }
+                else {
+                    // the selection was on a log that didn't match the filter, pick the previous match
+                    if(this.matchedLogs.length > 0) {
+                        // TODO: use binary search
+                        const nextMatch = this.matchedLogs.findIndex((record) => record.idx >= selectedLog.idx);
+                         if(nextMatch === -1) {
+                            this.logDisplayPanel.selectionIndex = this.matchedLogs.length - 1;
+                        }
+                        else if(nextMatch === 0) {
+                            this.logDisplayPanel.selectionIndex = 0;
+                        }
+                        else {
+                            this.logDisplayPanel.selectionIndex = nextMatch - 1;
+                        }
+                    }
+                }
+
+                if(selectionRow >= 0) {
+                    this.logDisplayPanel.scrollSelectionToRow(selectionRow);
+                }
+                else {
+                    this.logDisplayPanel.scrollAlignBottom();
+                }
+            }
+        }
+
+        this.logDisplayPanel.markDirty();
+        this.queryResultsSearchModePanel.markDirty();
+        this.queryResultsMatchesPanel.markDirty();
+        this.redrawEventsSubject.next(null);
+    }
+
+    public selectPreviousMatch(idx: LogIdx) {
+        if(!this.searchMode || this.matchedLogs.length === 0) {
+            return;
+        }
+
+        // TODO: use binary search
+        const nextMatch = this.matchedLogs.findIndex((record) => record.idx >= idx);
+        const matchedLog = (nextMatch === -1 || nextMatch === 0)?
+            this.matchedLogs[this.matchedLogs.length - 1]:
+            this.matchedLogs[nextMatch - 1];
+
+        this.logDisplayPanel.selectionIndex = matchedLog.idx;
+    }
+
+    public selectNextMatch(idx: LogIdx) {
+        if(!this.searchMode || this.matchedLogs.length === 0) {
+            return;
+        }
+
+        // TODO: use binary search
+        const nextMatch = this.matchedLogs.findIndex((record) => record.idx > idx);
+        const matchedLog = nextMatch === -1?
+            this.matchedLogs[0]:
+            this.matchedLogs[nextMatch];
+
+        this.logDisplayPanel.selectionIndex = matchedLog.idx;
+    }
+
     public renderTitle: () => void = () => {
         (this.titlePanel.buffer as any).setText('');
         (this.titlePanel.buffer as any).moveTo(0, 0);
@@ -266,7 +385,12 @@ export class LogStreamPanel<T extends LogStream = LogStream> extends Panel<Scree
         }
 
         (this.queryResultsMatchesPanel.buffer as any).moveTo(2, 0);
-        this.queryResultsMatchesPanel.buffer.insert(`${this.logDisplayPanel.logs.length}/${this.logStream.logdb.logs.length}`);
+        const matchedCount = 
+            this.filter?
+                this.matchedLogs.length:
+                this.logStream.logdb.logs.length;
+
+        this.queryResultsMatchesPanel.buffer.insert(`${matchedCount}/${this.logStream.logdb.logs.length}`);
         this.queryResultsMatchesPanel.buffer.insert(` `);
 
         const filterCount = Object.values(this.filterRules).filter((rule) => rule.enabled).length;
@@ -293,6 +417,18 @@ export class LogStreamPanel<T extends LogStream = LogStream> extends Panel<Scree
             (this.queryResultsThresholdPanel.buffer as any).put({x: 0, y: 0, attr: {color: 'yellow'}}, LogStreamPanel.fuzzysortThresholdFrames[this.fuzzysortThresholdIndex]);
         }
         (this.queryResultsThresholdPanel.buffer as any).put({x: 1, y: 0}, ' ');
+    }
+
+    public renderQueryResultsSearchMode: () => void = () => {
+        (this.queryResultsSearchModePanel.buffer as any).setText('');
+        if(this.searchMode) {
+            (this.queryResultsSearchModePanel.buffer as any).moveTo(0, 0);
+            (this.queryResultsSearchModePanel.buffer as any).insert('SEARCH');
+        }
+        else {
+            (this.queryResultsSearchModePanel.buffer as any).moveTo(0, 0);
+            (this.queryResultsSearchModePanel.buffer as any).insert('FILTER');
+        }
     }
 
     public setQuery(query: string): Subscription | undefined {
@@ -354,7 +490,9 @@ export class LogStreamPanel<T extends LogStream = LogStream> extends Panel<Scree
         this.filter = filter;
 
         // if autoscroll is disabled, the user has selected a log, and we would like to keep that log in view while filtering occurs
-        const selectedLog = !this.autoscroll && this.logDisplayPanel.selectionIndex < this.logDisplayPanel.logs.length? this.logDisplayPanel.logs[this.logDisplayPanel.selectionIndex]: undefined;
+        const selectedLog = !this.autoscroll && this.logDisplayPanel.selectionIndex < this.logDisplayPanel.logs.length?
+            this.logDisplayPanel.logs[this.logDisplayPanel.selectionIndex]:
+            undefined;
         const selectedLogScrollPosition = this.logDisplayPanel.selectionScrollPosition;
 
         if(!selectedLog) {
@@ -364,8 +502,10 @@ export class LogStreamPanel<T extends LogStream = LogStream> extends Panel<Scree
 
         let selectionFound = false;
 
-        this.logDisplayPanel.selectionIndex = 0;
-        this.logDisplayPanel.scrollPosition = 0;
+        if(!this.searchMode) {
+            this.logDisplayPanel.selectionIndex = 0;
+            this.logDisplayPanel.scrollPosition = 0;
+        }
 
         if(this.logDisplayPanel.resultSet) {
             for(let idx of this.logDisplayPanel.resultSet.matches.keys()) {
@@ -378,8 +518,15 @@ export class LogStreamPanel<T extends LogStream = LogStream> extends Panel<Scree
         // logDisplayPanel.expandedLogs.clear();
         // this.logDisplayPanel.logEntryCache.clear();
 
+        /** store logs in reverse order so we can easily iterate from the latest entry */
+        // const matchedLogs: SkipList<LogIdx, LogRecord> = new SkipList((a: number, b: number) => b - a);
+        // NOTE: if there is no filter, the matched sets don't do anything
+        this.matchedLogs = [];
+        this.matchedLogsMap.clear();
+
         if(!filter) {
             this.logDisplayPanel.logs = this.logStream.logdb.logs;
+            // instead of making a map with all the logs, just reset it since we only use it for highlighting logs in search mode.
             if(selectedLog) {
                 this.logDisplayPanel.selectionIndex = selectedLog.idx;
                 this.logDisplayPanel.selectionScrollPosition = selectedLogScrollPosition;
@@ -398,11 +545,12 @@ export class LogStreamPanel<T extends LogStream = LogStream> extends Panel<Scree
         this.redrawEventsSubject.next(null);
         // this.printQueryResults();
 
-        /** store logs in reverse order so we can easily iterate from the latest entry */
-        // const displayedLogs: SkipList<LogIdx, LogRecord> = new SkipList((a: number, b: number) => b - a);
-        const displayedLogs: LogRecord[] = [];
-        this.logDisplayPanel.logs = displayedLogs;
-
+        if(this.searchMode) {
+            this.logDisplayPanel.logs = this.logStream.logdb.logs;
+        }
+        else {
+            this.logDisplayPanel.logs = this.matchedLogs;
+        }
 
         this.filterSubscription = merge(
             this.logStream.logdb.filterAll(filter, LogStreamPanel.fuzzysortThresholdSteps[this.fuzzysortThresholdIndex]),
@@ -430,30 +578,33 @@ export class LogStreamPanel<T extends LogStream = LogStream> extends Panel<Scree
                     this.logDisplayPanel.logEntryCache.delete(match.logRecord.idx);
                 });
 
-                const insertIndex = insertSorted(record, displayedLogs, (a, b) => a.idx - b.idx);
+                const insertIndex = insertSorted(record, this.matchedLogs, (a, b) => a.idx - b.idx);
+                this.matchedLogsMap.set(record.idx, record);
                 // TODO: what if autoscrolling is changed mid-filter?
                 // TODO: if the selection is changed mid-filter, we get screen flickering, and then the selection is reset back to the previous selection if it was found, which might not be desirable
-                if(!this.autoscroll) {
-                    // set the selection to the correct log
-                    if(!selectionFound) {
-                        if(selectedLog && selectedLog.idx === record.idx) {
-                            this.logDisplayPanel.selectionIndex = insertIndex;
-                            this.logDisplayPanel.selectionScrollPosition = selectedLogScrollPosition;
-                            selectionFound = true;
+                if(!this.searchMode) {
+                    if(!this.autoscroll) {
+                        // set the selection to the correct log
+                        if(!selectionFound) {
+                            if(selectedLog && selectedLog.idx === record.idx) {
+                                this.logDisplayPanel.selectionIndex = insertIndex;
+                                this.logDisplayPanel.selectionScrollPosition = selectedLogScrollPosition;
+                                selectionFound = true;
+                            }
                         }
-                    }
-                    else if(insertIndex <= this.logDisplayPanel.selectionIndex) {
-                        this.logDisplayPanel.selectionIndex++;
-                    }
+                        else if(insertIndex <= this.logDisplayPanel.selectionIndex) {
+                            this.logDisplayPanel.selectionIndex++;
+                        }
 
-                    // scroll
-                    if(!selectionFound) {
-                        this.logDisplayPanel.scrollToLogFromBottom(this.logDisplayPanel.logs.length - 1);
-                    }
-                    else {
-                        // selection has been found, keep it on screen
-                        this.logDisplayPanel.scrollToMaximizeLog(this.logDisplayPanel.selectionIndex);
-                        this.logDisplayPanel.scrollAlignBottom();
+                        // scroll
+                        if(!selectionFound) {
+                            this.logDisplayPanel.scrollToLogFromBottom(this.logDisplayPanel.logs.length - 1);
+                        }
+                        else {
+                            // selection has been found, keep it on screen
+                            this.logDisplayPanel.scrollToMaximizeLog(this.logDisplayPanel.selectionIndex);
+                            this.logDisplayPanel.scrollAlignBottom();
+                        }
                     }
                 }
             })
