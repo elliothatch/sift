@@ -14,6 +14,7 @@ import { Parse, Parser } from './query';
 export class FilterPanel extends Panel<ScreenBuffer> {
     public keyPanel: ScreenPanel;
     public enabledPanel: ScreenPanel;
+    public typePanel: TextPanel;
     public namePanel: TextPanel;
     public queryPanel: TextPanel;
 
@@ -48,6 +49,15 @@ export class FilterPanel extends Panel<ScreenBuffer> {
             }
         });
 
+        this.typePanel = new TextPanel(this.buffer, {
+            name: `${this.options.name? this.options.name: ''}.typePanel`,
+            width: 7,
+            height: 1,
+            flex: {
+                height: true,
+            },
+        });
+
         this.namePanel = new TextPanel(this.buffer, {
             name: `${this.options.name? this.options.name: ''}.namePanel`,
             width: 16,
@@ -69,6 +79,7 @@ export class FilterPanel extends Panel<ScreenBuffer> {
 
         this.addChild(this.keyPanel);
         this.addChild(this.enabledPanel);
+        this.addChild(this.typePanel);
         this.addChild(this.namePanel);
         this.addChild(this.queryPanel);
     }
@@ -81,6 +92,7 @@ export class FilterPanel extends Panel<ScreenBuffer> {
         // clear
         this.keyPanel.buffer.fill({char: ' '});
         this.enabledPanel.buffer.fill({char: ' '});
+        (this.typePanel.buffer as any).setText('');
         (this.namePanel.buffer as any).setText('');
         (this.queryPanel.buffer as any).setText('');
 
@@ -109,6 +121,10 @@ export class FilterPanel extends Panel<ScreenBuffer> {
             attr: {underline: true}
         });
 
+        (this.typePanel.buffer as any).moveTo(0,0);
+        this.typePanel.buffer.insert('type', {underline: true});
+        this.typePanel.buffer.insert(' '.repeat(Math.max(0, this.typePanel.calculatedWidth - 'type'.length)), {underline: true});
+
         (this.namePanel.buffer as any).moveTo(0,0);
         this.namePanel.buffer.insert('name', {underline: true});
         this.namePanel.buffer.insert(' '.repeat(Math.max(0, this.namePanel.calculatedWidth - 'name'.length)), {underline: true});
@@ -120,6 +136,7 @@ export class FilterPanel extends Panel<ScreenBuffer> {
         this.queryPanel.buffer.insert(queryTextRight, {underline: true});
 
         (this.enabledPanel.buffer as any).moveTo(1,1);
+        (this.typePanel.buffer as any).moveTo(0,1);
         (this.namePanel.buffer as any).moveTo(0,1);
         (this.queryPanel.buffer as any).moveTo(0,1);
 
@@ -143,6 +160,9 @@ export class FilterPanel extends Panel<ScreenBuffer> {
 
             (this.enabledPanel.buffer as any).put(undefined, ']');
 
+            this.typePanel.buffer.insert(rule.type);
+            this.typePanel.buffer.newLine();
+
             this.namePanel.buffer.insert(rule.name);
             this.namePanel.buffer.newLine();
 
@@ -153,6 +173,7 @@ export class FilterPanel extends Panel<ScreenBuffer> {
 
         this.keyPanel.markDirty();
         this.enabledPanel.markDirty();
+        this.typePanel.markDirty();
         this.namePanel.markDirty();
         this.queryPanel.markDirty();
     }
@@ -180,10 +201,16 @@ export class FilterPanel extends Panel<ScreenBuffer> {
 }
 
 export namespace FilterPanel {
+    /** MATCH rules are joined with "OR". more MATCHES produce a larger result set
+     *  FILTER rules are joined with "AND". more FILTERS produce a smaller result set
+     * 
+     */
+    export type RuleType = 'MATCH' | 'FILTER';
     export interface Rule {
         enabled: boolean;
         name: string;
         query: string;
         expr?: Parse.Expression;
+        type: RuleType;
     }
 }

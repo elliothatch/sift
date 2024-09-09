@@ -151,7 +151,11 @@ More complex queries can be created with unary and binary operators.
 You can also surround part of a query with quotation marks (") to search for a literal string, in case you want to search for a string containing sift operators. This is currently buggy and doesn't work if your query contains more than one quoted string.
 
 ## filters
-Filters are customizable, persistent queries that can be toggled on and off to refine a search without needing to retype them every time. They are applied to the typed query as additional AND rules.
+Filters are customizable, persistent queries that can be toggled on and off to refine a search without needing to retype them every time. They are grouped together and applied to the typed query as an additional AND rule.
+
+There are two types of filter rules: `MATCH` and `FILTER`.
+ - `MATCH` rules are joined with "OR". More MATCHES produce a larger result set.
+ - `FILTER` rules are joined with "AND". More FILTERS produce a smaller result set.
 
 Access Filter Mode through the command panel by typing `\f`.
 
@@ -189,7 +193,7 @@ Sift is in very early development, and could be improved by the addition of seve
  - Query history: History of queries and commands used to spawn processes.
 
 # changelog
- - 1.2.0: Add search view to jump between filter matches without hiding unfiltered logs.
+ - 1.2.0: Add search view to jump between filter matches without hiding unfiltered logs. Add `MATCH` and `FILTER` rules to the filters table.
  - 1.1.4: Use standard unicode arrow symbols in controls instead of less supported "Block" arrows
  - 1.1.3: Remove npm-shrinkwrap because it forces devDependencies to install on a global install, with precedence over the rxjs version declared in package.json.
  - 1.1.2: Add fuzzy matching threshold controls. Add basic formatting mode. Fix bugs with scrolling and closing panels. Expand in-app help.

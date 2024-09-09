@@ -443,30 +443,50 @@ export class LogStreamPanel<T extends LogStream = LogStream> extends Panel<Scree
             // TODO: show user reason their query is invalid
         }
 
-        // apply rules from FILTER panel
-        const filterExpr: Parse.Expression | undefined =
-        Object.entries(this.filterRules).filter(([key, rule]) => rule.enabled && rule.expr)
-        .reduce((filter, [key, rule]) => {
-            if(!filter) {
+        // apply rules from the filter panel
+        const rules = Object.values(this.filterRules).filter((rule) => rule.enabled && rule.expr);
+        const matchExpr: Parse.Expression | undefined = Object.values(rules).filter((rule) => rule.type === 'MATCH').reduce((expr, rule) => {
+            if(!expr) {
                 return rule.expr;
             }
 
             return {
                 eType: 'OR',
                 lhs: rule.expr,
-                rhs: filter
+                rhs: expr
             };
         }, undefined as Parse.Expression | undefined);
 
-        if(filterExpr) {
+        const filterExpr: Parse.Expression | undefined = Object.values(rules).filter((rule) => rule.type === 'FILTER').reduce((expr, rule) => {
+            if(!expr) {
+                return rule.expr;
+            }
+
+            return {
+                eType: 'AND',
+                lhs: rule.expr,
+                rhs: expr
+            };
+        }, undefined as Parse.Expression | undefined);
+
+        const rulesExpr: Parse.Expression | undefined = 
+            matchExpr && filterExpr?
+                {
+                    eType: 'AND',
+                    lhs: matchExpr,
+                    rhs: filterExpr
+                }:
+            matchExpr || filterExpr;
+
+        if(rulesExpr) {
             if(!filter) {
-                filter = filterExpr;
+                filter = rulesExpr;
             }
             else {
                 filter = {
                     eType: 'AND',
                     lhs: filter,
-                    rhs: filterExpr
+                    rhs: rulesExpr
                 };
             }
         };

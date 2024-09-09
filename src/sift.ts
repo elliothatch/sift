@@ -7,6 +7,8 @@ import { LogStreamPanel } from './logstreampanel';
 import { Input } from './input';
 import { Command } from './commandpanel';
 
+import { FilterPanel } from './filterpanel';
+
 const SIFT_VERSION = 'v1.2.0';
 
 export class Sift {
@@ -99,23 +101,27 @@ export class Sift {
 
         this.display.filterPanel.setRule('e', {
             enabled: false,
+            type: 'MATCH',
             name: 'Error',
             query: 'level:error'
         });
         this.display.filterPanel.setRule('w', {
             enabled: false,
+            type: 'MATCH',
             name: 'Warning',
             query: 'level:warn'
         });
-        this.display.filterPanel.setRule('i', {
-            enabled: false,
-            name: 'Info',
-            query: 'level:info'
-        });
         this.display.filterPanel.setRule('t', {
             enabled: false,
+            type: 'FILTER',
             name: 'Trace',
-            query: 'level:trace'
+            query: 'level:!trace'
+        });
+        this.display.filterPanel.setRule('r', {
+            enabled: false,
+            type: 'FILTER',
+            name: 'Request',
+            query: 'level:!request'
         });
 
         this.display.formatPanel.insertRule({
@@ -249,7 +255,6 @@ export class Sift {
         this.input.mode = Input.Mode.Text;
         this.display.draw();
     }
-
 
     public actions = {
         [Input.Mode.Query]: asActions({
@@ -1110,75 +1115,94 @@ export class Sift {
             const onCancel = () => {
                 this.input.mode = Input.Mode.Filter;
                 (this.display.terminal as any).hideCursor(true);
+                this.display.hideQueryKeyPanel();
                 this.display.draw();
             };
             const rule = this.display.filterPanel.rules[key];
             if(rule) {
                 // edit
-                this.promptTextInput(`Edit filter '${key}' (name)`, (filterName) => {
-                    if(filterName === '') {
+                // TODO: make a reusable command panel for multiple choice options
+                this.promptTextInput(`Edit filter '${key}' (type): MATCH or FILTER`, (filterType) => {
+                    if(filterType !== 'MATCH' && filterType !== 'FILTER') {
                         onCancel();
                         return;
                     }
-                    this.promptTextInput(`Edit filter '${key}' (query)`, (query) => {
-                        if(query === '') {
+                    this.promptTextInput(`Edit filter '${key}' (name)`, (filterName) => {
+                        if(filterName === '') {
                             onCancel();
                             return;
                         }
-                        const rule = {
-                            enabled: true,
-                            name: filterName,
-                            query
-                        };
-                        this.display.filterPanel.setRule(key, rule);
-                        this.input.mode = Input.Mode.Filter;
-                        (this.display.terminal as any).hideCursor(true);
-                        this.display.filterPanel.markDirty();
-
-                        // we need to update all log stream panels that had this rule applied
-                        this.logStreams.forEach((logStream) => {
-                            const panelRule = logStream.panel.filterRules[key];
-                            if(panelRule && panelRule.enabled) {
-                                logStream.panel.filterRules[key] = {...rule};
-                                logStream.panel.setQuery((logStream.panel.queryPromptInputPanel.buffer as any).getText());
-                                logStream.panel.markDirty();
-
+                        this.promptTextInput(`Edit filter '${key}' (query)`, (query) => {
+                            if(query === '') {
+                                onCancel();
+                                return;
                             }
-                        });
+                            const rule: FilterPanel.Rule = {
+                                type: filterType,
+                                enabled: true,
+                                name: filterName,
+                                query
+                            };
+                            this.display.filterPanel.setRule(key, rule);
+                            this.input.mode = Input.Mode.Filter;
+                            (this.display.terminal as any).hideCursor(true);
+                            this.display.filterPanel.markDirty();
+                            this.display.hideQueryKeyPanel();
 
-                        this.display.draw();
+                            // we need to update all log stream panels that had this rule applied
+                            this.logStreams.forEach((logStream) => {
+                                const panelRule = logStream.panel.filterRules[key];
+                                if(panelRule && panelRule.enabled) {
+                                    logStream.panel.filterRules[key] = {...rule};
+                                    logStream.panel.setQuery((logStream.panel.queryPromptInputPanel.buffer as any).getText());
+                                    logStream.panel.markDirty();
+
+                                }
+                            });
+
+                            this.display.draw();
+                        },
+                            onCancel,
+                            rule.query);
                     },
                         onCancel,
-                        rule.query);
+                        rule.name);
                 },
-                    onCancel,
-                    rule.name,
-                );
+                onCancel,
+                rule.type);
             }
             else {
                 // create
-                this.promptTextInput(`New filter '${key}' (name)`, (filterName) => {
-                    if(filterName === '') {
+                this.promptTextInput(`New filter '${key}' (type): MATCH or FILTER`, (filterType) => {
+                    if(filterType !== 'MATCH' && filterType !== 'FILTER') {
                         onCancel();
                         return;
                     }
-                    this.promptTextInput(`New filter '${key}' (query)`, (query) => {
-                        if(query === '') {
+                    this.promptTextInput(`New filter '${key}' (name)`, (filterName) => {
+                        if(filterName === '') {
                             onCancel();
                             return;
                         }
-                        const rule = {
-                            enabled: true,
-                            name: filterName,
-                            query
-                        };
-                        this.display.filterPanel.setRule(key, rule);
-                        this.input.mode = Input.Mode.Filter;
-                        (this.display.terminal as any).hideCursor(true);
-                        this.display.filterPanel.markDirty();
-                        this.currentLogStreamPanel.filterRules[key] = {...rule};
-                        this.currentLogStreamPanel.setQuery((this.currentLogStreamPanel.queryPromptInputPanel.buffer as any).getText());
-                        this.display.draw();
+                        this.promptTextInput(`New filter '${key}' (query)`, (query) => {
+                            if(query === '') {
+                                onCancel();
+                                return;
+                            }
+                            const rule: FilterPanel.Rule = {
+                                type: filterType,
+                                enabled: true,
+                                name: filterName,
+                                query
+                            };
+                            this.display.filterPanel.setRule(key, rule);
+                            this.input.mode = Input.Mode.Filter;
+                            (this.display.terminal as any).hideCursor(true);
+                            this.display.filterPanel.markDirty();
+                            this.display.hideQueryKeyPanel();
+                            this.currentLogStreamPanel.filterRules[key] = {...rule};
+                            this.currentLogStreamPanel.setQuery((this.currentLogStreamPanel.queryPromptInputPanel.buffer as any).getText());
+                            this.display.draw();
+                        }, onCancel);
                     }, onCancel);
                 }, onCancel);
             }
